@@ -149,4 +149,16 @@ Within a given program, types, template functions, and inline functions can have
 
 Violating will lead to redefinition error.
 
+__________________________________________________________
+
+#include <iostream>
+ 
+using namespace std; // this is a using directive telling the compiler to check the std namespace when resolving identifiers with no prefix
+ 
+int main()
+{
+    cout << "Hello world!"; // cout has no prefix, so the compiler will check to see if cout is defined locally or in namespace std
+    return 0;
+}
+
 
