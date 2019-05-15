@@ -1,0 +1,32 @@
+Matrix
+[4x3] [3x5] can be multiplied together. No. of col of first matrix must be equal to no. of rows of second matrix.
+Thus, does not mean that second one can multiply first one.
+
+What's impt is not the result, it's the way you multiply them.
+Many diff ways to multiply a few matrices together. Multiplyingg 4 matrices will create 3 nodes. 
+No. of ways to multiply: T(n)= 2nCn/n+1
+
+________________________________________________________________________________________________________________________
+Semantic of island membership (of triangles)
+Islands are separated by seam
+
+Island matrix (example)
+      1 2 3 4 
+A = 1|1 0 1 1|
+    2|  1 0 1|
+    3|    1 0|
+    4|      1|
+
+For finding if triangles are on the same island. If we use island matrix, and we have n triangles in mesh, we need to process n^2 data pts.
+
+Instead of this, we can ignore pair of triangles that are not neighbors. Then we would only be concerned with each triangle's neightbors.
+--> Lead to 3n data points to be processed
+
+Problems arise when model has seam between the two triangles, but they are next to each other. 
+So, instead of asking if 2 neighbors are on same island, we ask if they have a seam between them.
+
+Reduce runtime complexity by dropping up to 50% of all rows.
+_______________________________________________________________________________________________________________
+
+Mapping 3D meshes to plane
+depending on the types seam
