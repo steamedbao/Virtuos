@@ -161,4 +161,58 @@ int main()
     return 0;
 }
 
+^can help to save troubel of writing std::cout, as compiler will try to match cout with the namespace
+***BUT dont use this bc compiling will fail if there are confusing cases, eg. if there is a function also named cout
+
+__________________________________________________________
+
+Macro is a rule that defines how input text is converted into replacement output text.
+
+Example:
+
+#include <iostream>
+ 
+#define MY_NAME "Alex"
+ 
+int main()
+{
+    std::cout << "My name is: " << MY_NAME;
+ 
+    return 0;
+}
+
+__________________________________________________________
+
+Conditional compilation preprocessor directives 
+- Allow you to specify under what conditions something will or won’t compile
+
+
+#ifdef, #ifndef, and #endif
+
+if defined then...
+if not defined then...
+
+Example:
+
+#include <iostream>
+ 
+#define PRINT_JOE
+ 
+int main()
+{
+#ifdef PRINT_JOE // if PRINT_JOE is defined
+    std::cout << "Joe\n"; // execute this code
+#endif
+ 
+#ifdef PRINT_BOB // if PRINT_BOB is defined
+    std::cout << "Bob\n"; // execute this code
+#endif
+ 
+    return 0;
+}
+
+__________________________________________________________
+
+
+
 
