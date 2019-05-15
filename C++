@@ -1,0 +1,152 @@
+Nested functions are not supported - i.e. cannot define function in another function body
+
+eg.
+#include <iostream>
+ 
+int main()
+{
+    int foo() // Illegal: this function is nested inside function main()
+    {
+        std::cout << "foo!";
+        return 0;
+    }
+ 
+    foo(); // function call to foo()
+    return 0;
+}
+
+__________________________________________________________
+
+If want to use value calculated in a subroutine, that function must not be a void one (won't return any value to operating system).
+
+#include <iostream>
+void printA()
+{
+    std::cout << "A\n";
+}
+ 
+int main()
+{
+    std::cout << printA() << '\n';
+ 
+    return 0;
+}
+^will not compile
+__________________________________________________________
+
+
+***Always remember to add the return statement! 
+***If there are multiple return statement, control will be handed back to main function immediately after the first return statement!
+
+#include <iostream>
+
+
+int getvalue(){
+    
+    std::cout<<"Enter an integer\n";
+    int value {0};
+    std::cin>>value;
+    return value;
+    
+}
+
+
+int main()
+{
+    int x {getvalue()};
+    int y {getvalue()};
+    std::cout<<x<<"+"<<y<<"="<<x+y;
+    return 0;
+}
+^ cutting redundant steps by calling function
+***DRY - Dont repeat yourself practice -> minimise redundancy and less error prone
+
+__________________________________________________________
+
+Function parameters
+- inside the bracket of the function. 
+- work almost identically to variables defined inside the function, 
+- but with one difference: they are always initialized with a value provided by the caller of the function.
+
+int add(int x, int y){
+ std::cout<<x+y;
+}
+
+add(2,3) will return 5
+
+Arguments are what you pass into the function. eg 2 and 3 are arguments.
+x and y are parameters.
+
+***If it is important that one argument evaluate first, you should explicitly define the order of execution, instead of putting them as parameters together
+__________________________________________________________
+
+endl appends '\n' to the stream and calls flush() on the stream
+equivalent to 
+cout << x << '\n';
+cout.flush();
+
+__________________________________________________________
+Exercise
+
+#include <iostream>
+ 
+int doubleNumber(int x)
+{
+    return 2 * x;
+}
+ 
+int main()
+{
+    int x{ 0 };
+    std::cin >> x;
+    std::cout << doubleNumber(x) << '\n';
+    return 0;
+}
+
+__________________________________________________________
+
+Variables defined inside the function body, are called local variables
+
+Object’s lifetime is defined to be the time between its creation and destruction. 
+Note that variable creation and destruction happen when the program is running (called runtime), not at compile time. 
+Therefore, lifetime is a runtime property.
+
+Identifier’s scope determines where the identifier can be accessed within the source code. 
+When an identifier can be accessed, we say it is in scope. 
+When an identifier can not be accessed, we say it is out of scope. 
+Scope is a compile-time property, and trying to use an identifier when it is not in scope will result in a compile error.
+
+__________________________________________________________
+
+Compiler compiles the contents of code files sequentially, thus order of function definition matters!
+
+Sometimes, there will be no way of satisfying compiler bc B calls A and A calls B.
+
+When there is error due to order, there are some solutions:
+1. reorder the functions
+2. forward declarations 
+\\
+int add(int x, int y); // forward declaration of add() (using a function prototype)
+
+A function prototype:
+A declaration statement that includes a function’s name, return type, and parameters. It does not include the function body.
+
+**Dont forget to define the function body later on!
+Forward declarations tell the compiler about the existence of an identifier before actually defining the identifier.
+
+Can also use this if main function and program function are not in the same file.
+__________________________________________________________
+
+One definition rule
+
+Within a given file, a function, object, type, or template can only have one definition.
+Within a given program, an object or normal function can only have one definition. This distinction is made because programs can have more than one file 
+Within a given program, types, template functions, and inline functions can have multiple definitions so long as they are identical.
+
+Within a given file, a function, object, type, or template can only have one definition.
+Within a given program, an object or normal function can only have one definition. This distinction is made because programs can have more than one file (we’ll cover this in the next lesson).
+Within a given program, types, template functions, and inline functions can have multiple definitions so long as they are identical. We haven’t covered what most of these things are yet, so don’t worry about this for now -- we’ll bring it back up when it’s relevant.
+
+Violating will lead to redefinition error.
+
+
