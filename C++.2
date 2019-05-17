@@ -1,0 +1,117 @@
+Overload & Templates
+
+2 functions can have the same name if their parameters are different.
+Either because:
+1. there is diff no. of parameters
+2. parameters are of a diff type
+
+#include <iostream>
+using namespace std;
+
+int sum (int a, int b)
+{
+  return a+b;
+}
+
+double sum (double a, double b)
+{
+  return a+b;
+}
+
+int main ()
+{
+  cout << sum (10,20) << '\n';
+  cout << sum (1.0,1.5) << '\n';
+  return 0;
+}
+
+
+Compiler knows which function to call by examining types passed as parameters
+
+** cannot overload only by its return type and at least 1 of its parameters must have a diff type
+____________________________________________________________________________________________________
+The function sum could be overloaded for a lot of types, and it could make sense for all of them to have the same body.
+For cases such as this, C++ has the ability to define functions with generic types, known as function templates. 
+
+
+// function template
+#include <iostream>
+using namespace std;
+
+template <class T>
+T sum (T a, T b)
+{
+  T result;
+  result = a + b;
+  return result;
+}
+
+int main () {
+  int i=5, j=6, k;
+  double f=2.0, g=0.5, h;
+  k=sum<int>(i,j);
+  h=sum<double>(f,g);
+  cout << k << '\n';
+  cout << h << '\n';
+  return 0;
+}
+
+____________________________________________________________________________________________________
+Name visibility
+Scope
+
+An entity declared outside any block has global scope, meaning that its name is valid anywhere in the code. 
+While an entity declared within a block, such as a function or a selective statement, has block scope, and is only visible within the specific block in which it is declared, but not outside it.
+
+Variables with block scope are known as local variables.
+
+example
+
+int foo;        // global variable
+
+int some_function ()
+{
+  int bar;      // local variable
+  bar = 0;
+}
+
+int other_function ()
+{
+  foo = 1;  // ok: foo is a global variable
+  bar = 2;  // wrong: bar is not visible from this function
+}
+
+____________________________________________________________________________________________________
+Scope and inner blocks
+
+// inner block scopes
+#include <iostream>
+using namespace std;
+
+int main () {
+  int x = 10;
+  int y = 20;
+  {
+    int x;   // ok, inner scope.
+    x = 50;  // sets value to inner x
+    y = 50;  // sets value to (outer) y
+    cout << "inner block:\n";
+    cout << "x: " << x << '\n';
+    cout << "y: " << y << '\n';
+  }
+  cout << "outer block:\n";
+  cout << "x: " << x << '\n';
+  cout << "y: " << y << '\n';
+  return 0;
+}
+
+____________________________________________________________________________________________________
+
+Namespaces allow us to group named entities that otherwise would have global scope into narrower scopes, giving them namespace scope. 
+This allows organizing the elements of programs into different logical scopes referred to by names.
+
+
+
+
+
+
