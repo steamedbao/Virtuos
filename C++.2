@@ -110,8 +110,140 @@ ________________________________________________________________________________
 Namespaces allow us to group named entities that otherwise would have global scope into narrower scopes, giving them namespace scope. 
 This allows organizing the elements of programs into different logical scopes referred to by names.
 
+But there is another substantial difference between variables with static storage and variables with automatic storage:
+- Variables with static storage (such as global variables) that are not explicitly initialized are automatically initialized to zeroes.
+- Variables with automatic storage (such as local variables) that are not explicitly initialized are left uninitialized, and thus have an undetermined value.
+
+// using namespace example
+#include <iostream>
+using namespace std;
+
+namespace first
+{
+  int x = 5;
+}
+
+namespace second
+{
+  double x = 3.1416;
+}
+
+int main () {
+  {
+    using namespace first;
+    cout << x << '\n';
+  }
+  {
+    using namespace second;
+    cout << x << '\n';
+  }
+  return 0;
+}
+
+output = 
+5
+3.1416
+____________________________________________________________________________________________________
+
+Static arrays, and those declared directly in a namespace (outside any function), are always initialized. 
+If no explicit initializer is specified, all the elements are default-initialized.
+
+int foo [5]; //if elements are type int
+
+Multidimensional arrays
+int jimmy[row][col];
 
 
+int jimmy [3][5];   // is equivalent to
+int jimmy [15];     // (3 * 5 = 15)  
 
+Not limited to 2 dimensions, but the amount of memory needed for an array increases exponentially with each dimension.
 
+____________________________________________________________________________________________________
 
+multidimensional array	
+#define WIDTH 5
+#define HEIGHT 3
+
+int jimmy [HEIGHT][WIDTH];
+int n,m;
+
+int main ()
+{
+  for (n=0; n<HEIGHT; n++)
+    for (m=0; m<WIDTH; m++)
+    {
+      jimmy[n][m]=(n+1)*(m+1);
+    }
+}
+
+pseudo-multidimensional array
+
+#define WIDTH 5
+#define HEIGHT 3
+
+int jimmy [HEIGHT * WIDTH];
+int n,m;
+
+int main ()
+{
+  for (n=0; n<HEIGHT; n++)
+    for (m=0; m<WIDTH; m++)
+    {
+      jimmy[n*WIDTH+m]=(n+1)*(m+1);
+    }
+}
+
+____________________________________________________________________________________________________
+In C++, it is not possible to pass the entire block of memory represented by an array to a function directly as an argument.
+Parameters can be declared as the array type, but with empty brackets, omitting the actual size of the array.
+
+// arrays as parameters
+#include <iostream>
+using namespace std;
+
+void printarray (int arg[], int length) {
+  for (int n=0; n<length; ++n)
+    cout << arg[n] << ' ';
+  cout << '\n';
+}
+
+int main ()
+{
+  int firstarray[] = {5, 10, 15};
+  int secondarray[] = {2, 4, 6, 8, 10};
+  printarray (firstarray,3);
+  printarray (secondarray,5);
+}
+
+____________________________________________________________________________________________________
+
+language built-in array	container library array
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+  int myarray[3] = {10,20,30};
+
+  for (int i=0; i<3; ++i)
+    ++myarray[i];
+
+  for (int elem : myarray)
+    cout << elem << '\n';
+}
+#include <iostream>
+#include <array>
+using namespace std;
+
+int main()
+{
+  array<int,3> myarray {10,20,30};
+
+  for (int i=0; i<myarray.size(); ++i)
+    ++myarray[i];
+
+  for (int elem : myarray)
+    cout << elem << '\n';
+}
