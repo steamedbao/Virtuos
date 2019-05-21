@@ -1,0 +1,305 @@
+Struct
+Aggregate data type is a data type that groups multiple individual variables together. 
+Structs (short for structure) allow us to group variables of mixed data types together into a single unit.
+
+eg. 
+struct Employee
+{
+    short id;
+    int age;
+    double wage;
+};
+
+Initializing member variable
+
+Employee joe; // create an Employee struct for Joe
+joe.id = 14; // assign a value to member id within struct joe
+joe.age = 32; // assign a value to member age within struct joe
+joe.wage = 24.15; // assign a value to member wage within struct joe
+ 
+Employee frank; // create an Employee struct for Frank
+frank.id = 15; // assign a value to member id within struct frank
+frank.age = 28; // assign a value to member age within struct frank
+frank.wage = 18.27;
+
+int totalAge = joe.age + frank.age;
+ 
+if (joe.wage > frank.wage)
+    std::cout << "Joe makes more than Frank\n";
+else if (joe.wage < frank.wage)
+    std::cout << "Joe makes less than Frank\n";
+else
+    std::cout << "Joe and Frank make the same amount\n";
+ 
+// Frank got a promotion
+frank.wage += 2.50;
+ 
+// Today is Joe's birthday
+++joe.age; // use pre-increment to increment Joe's age by 1
+
+Initializing
+
+struct Employee
+{
+    short id;
+    int age;
+    double wage;
+};
+ 
+Employee joe = { 1, 32, 60000.0 }; // joe.id = 1, joe.age = 32, joe.wage = 60000.0
+Employee frank = { 2, 28 }; // frank.id = 2, frank.age = 28, frank.wage = 0.0 (default initialization)
+In C++11, we can also use uniform initialization:
+
+Employee joe { 1, 32, 60000.0 }; // joe.id = 1, joe.age = 32, joe.wage = 60000.0
+Employee frank { 2, 28 }; // frank.id = 2, frank.age = 28, frank.wage = 0.0 (default initialization)
+______________________________________________________________________________________________________________________
+
+Enum type
+A type of user-defined data type. Every possible value is defined as a symbolic constant (called an enumerator)
+
+Eg. 
+enum Color
+{
+RED,
+BLUE, // BLUE is put into the global namespace
+GREEN
+};
+ 
+enum Feeling
+{
+HAPPY,
+TIRED,
+BLUE // error, BLUE was already used in enum Color in the global namespace
+};
+----------------------------------
+enum Color
+{
+    COLOR_BLACK, // assigned 0
+    COLOR_RED, // assigned 1
+    COLOR_BLUE, // assigned 2
+    COLOR_GREEN, // assigned 3
+    COLOR_WHITE, // assigned 4
+    COLOR_CYAN, // assigned 5
+    COLOR_YELLOW, // assigned 6
+    COLOR_MAGENTA // assigned 7
+};
+ 
+Color paint(COLOR_WHITE);
+std::cout << paint;
+
+This will print 4
+
+------------------------------------
+
+// define a new enum named Animal
+enum Animal
+{
+    ANIMAL_CAT = -3,
+    ANIMAL_DOG, // assigned -2
+    ANIMAL_PIG, // assigned -1
+    ANIMAL_HORSE = 5,
+    ANIMAL_GIRAFFE = 5, // shares same value as ANIMAL_HORSE
+    ANIMAL_CHICKEN // assigned 6
+};
+
+Best practice: Don’t assign specific values to your enumerators.
+Rule: Don’t assign the same value to two enumerators in the same enumeration unless there’s a very good reason.
+Assigning same value will make the two variables interchangeable.
+
+------------------------------------
+enum Color
+{
+    COLOR_BLACK, // assigned 0
+    COLOR_RED, // assigned 1
+    COLOR_BLUE, // assigned 2
+    COLOR_GREEN, // assigned 3
+    COLOR_WHITE, // assigned 4
+    COLOR_CYAN, // assigned 5
+    COLOR_YELLOW, // assigned 6
+    COLOR_MAGENTA // assigned 7
+};
+ 
+Color color;
+std::cin >> color; // will cause compiler error
+------------------------------------------------
+int inputColor;
+std::cin >> inputColor;
+ 
+Color color = static_cast<Color>(inputColor); //defining the variable using static cast
+____________________________________________________________________________________________________________________
+OOP
+
+Code to manage and connect the properties (variables) to the behaviors (functions) in an appropriate manner.
+
+Create objects that tie together both properties and behaviors into a self-contained, reusable package.
+
+eg. you.driveTo(work)
+--> subject: you
+--> property: driving somewhr
+
+OOP gives you additional tools in your programming tool belt to manage complexity when needed.
+
+In C++, classes and structs are essentially the same. 
+In fact, the following struct and class are effectively identical:
+
+struct DateStruct
+{
+    int year;
+    int month;
+    int day;
+};
+ 
+class DateClass
+{
+public:
+    int m_year;
+    int m_month;
+    int m_day;
+};
+____________________________________________________________________________________________________________________
+
+***semicolon at the end of a class declaration!!!!
+
+C++ provides 3 different access specifier keywords: public, private, and protected. 
+Public and private are used to make the members that follow them public members or private members respectively. 
+The third access specifier, protected, works much like private does. We will discuss the difference between the private and protected access specifier when we cover inheritance.
+
+Struct vs class
+Members of a struct are public members by default --> can be accessed from outside of the struct or class
+
+By default, all members of a class are private --> cannot be accessed outside 
+--> can make them public by using the public keyword (access specifier)
+
+eg. 
+class DateClass
+{
+public: // note use of public keyword here, and the colon
+    int m_month; // public, can be accessed by anyone
+    int m_day; // public, can be accessed by anyone
+    int m_year; // public, can be accessed by anyone
+};
+ 
+int main()
+{
+    DateClass date;
+    date.m_month = 10; // okay because m_month is public
+    date.m_day = 14;  // okay because m_day is public
+    date.m_year = 2020;  // okay because m_year is public
+ 
+    return 0;
+}
+
+-------------------------------------------------------------------
+
+***Make member variables private, and member functions public, unless you have a good reason not to
+eg.
+
+#include <iostream>
+class Dateclass
+{
+  int m_month;
+  int m_date;
+  int m_year;
+  
+  public:             // public interface
+  void setdate(int month, int date, int year)
+  {
+    m_month = month;
+    m_date = date;
+    m_year = year;
+  }
+
+  void print()
+  {
+  std::cout<< m_month << "/" << m_date << "/" << m_year << "\n"
+  }
+};
+  
+int main()
+{
+  Dateclass date;
+  date.setdate(4, 20, 2019);
+  date.print();
+ 
+  return 0;
+}
+
+Access specifiers got 3 kinds: Public, private, and protected.
+--------------------------------------------------------------------
+Quiz 8.3 question 3: https://www.learncpp.com/cpp-tutorial/83-public-vs-private-access-specifiers/
+
+
+#include <iostream>
+#include <vector>
+
+class Stack {
+  std::vector<int> m_array;
+  int i;
+  
+  public:
+    void reset()
+    {
+        i = 0;
+        m_array.resize(i);
+    }
+   
+    void print(){
+        if (m_array.empty())
+        {
+            std::cout<<"( )\n";  
+        }
+        else 
+        {
+            std::cout<<"( ";
+            for (i=0; i<m_array.size();i++)
+            {
+                std::cout<<m_array[i]<<" ";
+            }
+            std::cout<<")"<<"\n";
+        }
+    }
+   
+    void push(int x)
+    {
+        m_array.push_back(x);
+    }
+   
+    void pop()
+    {
+        m_array.pop_back();
+    }
+
+
+};
+
+int main()
+{
+    Stack stack;
+    stack.reset();
+    
+    stack.print();
+    
+    stack.push(5);
+    stack.push(3);
+    stack.push(8);
+    stack.print();
+    
+    stack.pop();
+    stack.print();
+    
+    stack.pop();
+    stack.pop();
+    stack.print();
+    
+    return 0;
+}
+
+____________________________________________________________________________________________________________________
+
+
+
+Encapsulation
+Encapsulation (also called information hiding) is the process of keeping the details about how an object is implemented hidden away from users of the object. Instead, users of the object access the object through a public interface. 
+In this way, users are able to use the object without having to understand how it is implemented.
+
+Encapsulation via access specifiers
