@@ -1,1 +1,49 @@
-Starts when user clicks unwrap, 100% when results is produced.
+COS: Starts when user clicks unwrap, 100% when results is produced. 
+Prototype1.h Prototype1.cpp
+git branch
+dev_taskname
+
+- Rectangle() and line(), available in the <graphics.h> header file
+
+Rectangle():
+- 4 parameters
+    left
+    top
+    right
+    bottom 
+     - eg. Rectangle(200, 150, 450, 180) will create rectangle of 250 x 30
+- use getmaxx() and getmaxy() to get maximum x and y coordiantes
+- to draw line, we used line(x1,y1,x2,y2) function
+------------------------------------------------------------------------
+Create connectedsliders header file:
+ifndef Connectedsliders_h
+#define Connectedsliders_h
+
+#include <QWidget>
+#include <QProgressBar>
+#include <QVBoxLayout>
+
+class ConnectedSliders: public QWidget
+{
+  Q_OBJJECT;
+  public:
+    ConnectedSliders(QWidget *parent = 0);
+    -ConnectedSliders();
+    
+   private:
+    QProgressBar* progressBar;
+   
+   private slots:
+  
+};
+
+#endif //Connectedsliders_h
+
+Create connected sliders cpp file:
+-----------------------------------------------------------------------------
+#include "connectedsliders.h
+Connectedsliders: Connectedsliders(Qwidget *parent): QWidget(parent)
+{
+  setWindow
+}
+
