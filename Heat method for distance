@@ -1,0 +1,66 @@
+Geodestic distance
+The shortest distance along the surface to any point
+
+Fast marching, exact polyhedral scheme, ect. allows you to find these.
+There is a problem : everytime a new point is needed, have to recalculate.
+So no reuse of information
+And highly specialized because different schemes might not apply for certain surfaces
+
+Solved using 2 standard linear eqn:
+1. heat eqn
+2. Poisson equation
+
+Good:
+Fast, general, simple to:
+- parallelize
+- prefactor
+- sptial discretization
+- easy to implement
+
+Eiokonal equation
+- distance changes at one meter per meter 
+- problem: nonlinear
+
+Varadhan's formula
+- using heat kernel
+- as t approaches to 0, you get the geodestic distance
+- but under non-ideal situations, you will not get the correct geodestic distance becuse the kernel's spread is not the ideal shape
+----------------------------------------------------------------------------------------------------------------------------------------
+Heat method summarized - new solution to a very old problem, solving a traditionally hyperbolic problem linearly
+1. solve heat equation
+2. normalize gradient
+3. solve Poisson equation
+
+This is good because we solve a difficult nonlinear problem by splitting it into 2 linear parts (1 and 3), then normalizing with step 2
+And this does not depend on choice of spatial discretization, as long as can do steps 1-3, you can find the geodestic distance for the object
+
+Discretization: 
+The process of transferring continuous functions, models, variables, and equations into discrete counterparts
+
+Temporal discretization
+Heat eqn
+Backward Euler
+Linear elliptic equation
+
+
+t = mh^2 m is constant h is average distance between nodes
+Simulations show that t is optimal most of the times when m is close to 1, 
+so t = h^2
+
+Bad: 
+One tradeoff is higher error as mean edge length increases.
+
+Good: 
+But it is much faster, without even parallelization (parallel solver)!
+Robust even with point cloud with high noise and missing data, mesh with holes, polygonal mesh (can do without tessellation)
+with noise
+Smoother distance if t increases
+Potentially useful for machine learning
+
+
+
+
+
+
+
+
