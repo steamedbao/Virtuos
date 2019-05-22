@@ -1,0 +1,112 @@
+Unsigned int
+To define unsigned int:
+
+unsigned short us;
+unsigned int ui;
+unsigned long ul;
+unsigned long long ull;
+
+The number 280 is too big to fit in our 1-byte range of 0 to 255. 1 greater than the largest number of the type is 256. 
+Therefore, we divide 280 by 256, getting 1 remainder 24. The remainder of 24 is what is stored.
+
+It’s possible to wrap around the other direction as well. 
+0 is representable in a 1-byte integer, so that’s fine. -1 is not representable, so it wraps around to the top of the range, producing the value 255. 
+-2 wraps around to 254. And so forth.
+Overflow possible for signed integer, never overflow for unsigned integer.
+
+Don't use unsigned int because the wrap around can lead to very off values. 
+Eg. Civilization V Ghandi's peace going from 1 to 255 - nukes everyone
+
+Integer best practices
+If you need a variable guaranteed to be a particular size and want to favor performance, use std::int_fast#_t.
+If you need a variable guaranteed to be a particular size and want to favor memory conservation over performance, use std::int_least#_t. 
+This is used most often when allocating lots of variables.
+
+_________________________________________________________________
+#include <iostream>
+ 
+int main()
+{
+    std::cout << true << std::endl;
+    std::cout << false << std::endl;
+ 
+    std::cout << std::boolalpha; // print bools as true or false
+ 
+    std::cout << true << std::endl;
+    std::cout << false << std::endl;
+    return 0;
+}
+
+output:
+1
+0
+true
+false
+___________________________________________________________________
+
+endl:
+Inserts a new-line character and flushes the stream.
+Its behavior is equivalent to calling os.put('\n') 
+(or os.put(os.widen('\n')) for character types other than char), and then os.flush().
+
+Conditional statements are similar to those of C language.
+
+_____________________________________________________________________
+
+char - ASCII table
+
+#include <iostream>
+ 
+int main()
+{
+    char ch1{ 'a' };
+    std::cout << ch1; // cout prints a character
+ 
+    char ch2{ 98 }; // code point for 'b'
+    std::cout << ch2; // cout prints a character
+ 
+ 
+    return 0;
+}
+
+_____________________________________________________________________
+
+std::cout << "6F in hex is char \'\x6F\'\n"; = 6F in hex is char 'o'
+
+char is single quotes. string is double quotes.
+
+Alert	\a	Makes an alert, such as a beep
+Backspace	\b	Moves the cursor back one space
+Formfeed	\f	Moves the cursor to next logical page
+Newline	\n	Moves cursor to next line
+Carriage return	\r	Moves cursor to beginning of line
+Horizontal tab	\t	Prints a horizontal tab
+Vertical tab	\v	Prints a vertical tab
+Single quote	\’	Prints a single quote
+Double quote	\”	Prints a double quote
+Backslash	\\	Prints a backslash
+Question mark	\?	Prints a question mark
+Octal number	\(number)	Translates into char represented by octal
+Hex number	\x(number)	Translates into char represented by hex number
+
+Alw use ASCII when needed.
+
+***A magic number is a literal (usually a number) in the middle of the code that does not have any context. 
+What does 30 mean? Although you can probably guess that in this case it’s the maximum number of students per class, it’s not absolutely clear.
+Bad coding. Need comment to explain. DON'T use magic number in code.
+_____________________________________________________________________
+
+Constants
+const double gravity { 9.8 };
+
+2 types of constants in C++:
+Runtime constants are those whose initialization values can only be resolved at runtime (when your program is running). 
+Variables such as usersAge and myValue in the snippets above above are runtime constants, because the compiler can’t determine their initial values at compile time. 
+usersAge relies on user input (which can only be given at runtime) and myValue depends on the value passed into the function (which is only known at runtime).
+However, once initialized, the value of these constants can’t be changed.
+
+Compile-time constants are those whose initialization values can be resolved at compile-time (when your program is compiling).
+Variable gravity above is an example of a compile-time constant. 
+Compile-time constants enable the compiler to perform optimizations that aren’t available with runtime constants.
+For example, whenever gravity is used, the compiler can simply substitute the identifier gravity for the literal double 9.8.
+
