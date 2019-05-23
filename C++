@@ -1,3 +1,8 @@
+*****IMPORTANT: if in definition, the object is not defined as a pointer, when you call it in the function, need to attach and "&" sign to the front of its name.
+--> calling by address
+If it is defined as a pointer, eg. QProgressBar* m_progressBar
+then you can call it as it is in the main.cpp functions, eg. addWidget(m_progressBar)
+
 Nested functions are not supported - i.e. cannot define function in another function body
 
 eg.
