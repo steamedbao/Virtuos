@@ -1,0 +1,20 @@
+Initialization:
+
+std::array<int, 5> myArray = { 9, 7, 5, 3, 1 }; // initialization list
+std::array<int, 5> myArray2 { 9, 7, 5, 3, 1 }; // uniform initialization
+
+
+std::array<int, 5> myArray;
+myArray = { 0, 1, 2, 3, 4 };      // okay
+myArray = { 9, 8, 7 };            // okay, elements 3 and 4 are set to zero!
+myArray = { 0, 1, 2, 3, 4, 5 };   // not allowed, too many elements in initializer list!
+
+---------------------------------------------------------------------------------------------
+
+Bound checking
+
+std::array<int, 5> myArray { 9, 7, 5, 3, 1 };
+myArray.at(1) = 6;                                    // array element 1 valid, sets array element 1 to value 6
+myArray.at(9) = 10;                                   // array element 9 is invalid, will throw error
+
+
