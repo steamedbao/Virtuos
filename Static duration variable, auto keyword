@@ -59,7 +59,14 @@ meaning the variable will only be created once, and will not be destroyed until 
 
 ________________________________________________________________________________________________________________________________________
 
+auto keyword
 
+auto keyword was extended to be able to auto-deduce a function’s return type
+
+auto add(int x, int y)
+{
+    return x + y;
+}
 
 
 
