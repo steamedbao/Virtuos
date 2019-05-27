@@ -26,6 +26,13 @@ class RGBA
 	
 		{
 				cout << "r=" << static_cast<int>(m_red) ;  //static cast see comment
+				
+				simplest type of cast which can be used. 
+				a compile time cast.
+				It does things like implicit conversions between types (such as int to float, or pointer to void*), 
+				and it can also call explicit conversion functions 
+				
+				
 				cout << " g=" << static_cast<int>(m_green);
 				cout << " b=" << (m_blue);
 				cout << " a=" << m_alpha << "\n";
