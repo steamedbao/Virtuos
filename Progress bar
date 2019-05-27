@@ -1,49 +1,154 @@
 COS: Starts when user clicks unwrap, 100% when results is produced. 
-Prototype1.h Prototype1.cpp
-git branch
-dev_taskname
 
-- Rectangle() and line(), available in the <graphics.h> header file
+_____________________________________________________________________________________________
+prototype1.h
+#include <QtWidgets/qprogressbar.h>
+#include <qtimer.h>
+class QTimer; (don't need unless compiler complain)
 
-Rectangle():
-- 4 parameters
-    left
-    top
-    right
-    bottom 
-     - eg. Rectangle(200, 150, 450, 180) will create rectangle of 250 x 30
-- use getmaxx() and getmaxy() to get maximum x and y coordiantes
-- to draw line, we used line(x1,y1,x2,y2) function
-------------------------------------------------------------------------
-Create connectedsliders header file:
-ifndef Connectedsliders_h
-#define Connectedsliders_h
-
-#include <QWidget>
-#include <QProgressBar>
-#include <QVBoxLayout>
-
-class ConnectedSliders: public QWidget
+namespace virtuosrnd
 {
-  Q_OBJJECT;
-  public:
-    ConnectedSliders(QWidget *parent = 0);
-    -ConnectedSliders();
-    
-   private:
-    QProgressBar* progressBar;
-   
-   private slots:
-  
-};
+    class osgViewerQt:public QMainWindow
+    {
+    Q_OBJECT
+    public slots:
+		void timercount(bool count);
+		void updateprogressbar();
+		void onresetprogressbar(bool reset);
+        
+    private:
+        void createProgressBar();
+        
+    private:
+		QProgressBar*	m_progressBar; 
+		QTimer*	timer;
+    };
+ }
+        
+        
+--------------------------------------------------------------------------------------------------------------------------------
 
-#endif //Connectedsliders_h
-
-Create connected sliders cpp file:
------------------------------------------------------------------------------
-#include "connectedsliders.h
-Connectedsliders: Connectedsliders(Qwidget *parent): QWidget(parent)
+ prototype.cpp
+ 
+ namespace VirtuosRnD
 {
-  setWindow
+ osgViewerQt::osgViewerQt(ArgumentParser& arguments):
+	m_operationMode(OPERATION_SELECT),
+	m_uvEditor(NULL),
+	m_unwrapToolBar(NULL)
+{
+	osgViewer::ViewerBase::ThreadingModel threadingModel = osgViewer::ViewerBase::SingleThreaded;
+
+#if QT_VERSION >= 0x040800
+	if (threadingModel != osgViewer::ViewerBase::SingleThreaded)
+		QApplication::setAttribute(Qt::AA_X11InitThreads);
+#endif
+	
+	m_viewer = ViewerWidget::create(arguments, this, Qt::Widget, threadingModel);
+	setCentralWidget(m_viewer);
+	createToolBar();
+	createMenu();
+
+	
+
+	m_viewer->setMinimumSize(QSize(200, 100));
+
+
+
+	QCoreApplication::instance()->installEventFilter(this);
+
+	// about box instance
+	m_about = new AboutDialog;
+
+	// the preference dialog instance
+	m_preferences = new PreferenceDialog;
+
+	//connect(m_viewer, &ViewerWidget::onloadTexture, this, &osgViewerQt::timercount);
+	//connect(m_viewer, &ViewerWidget::onclearTexture, this, &osgViewerQt::timercount);
+	connect(m_viewer, &ViewerWidget::onunwrapUV, this, &osgViewerQt::timercount);
+	connect(m_viewer, &ViewerWidget::resetprogressbar, this, &osgViewerQt::onresetprogressbar);
+
 }
+
+void osgViewerQt::createProgressBar()
+{
+	m_progressBar = new QProgressBar;
+	m_progressBar->setMinimum(0);
+	m_progressBar->setMaximum(100);
+	m_progressBar->setValue(0);
+
+}
+
+
+void osgViewerQt::timercount(bool count)
+{
+
+	timer = new QTimer;
+	connect(timer, &QTimer::timeout, this, &osgViewerQt::updateprogressbar);
+	timer->start(1);
+
+}
+
+void osgViewerQt::updateprogressbar()
+{
+	int counter=0;
+	while (counter <= 69)
+	{
+		counter++;
+		m_progressBar->setValue(counter);
+	}
+	timer->stop();
+
+}
+
+void osgViewerQt::onresetprogressbar(bool reset)
+{
+
+	m_progressBar->setValue(80);
+	Sleep(50);
+	m_progressBar->setValue(90);
+	Sleep(50);
+	m_progressBar->setValue(100);
+	Sleep(200);
+	m_progressBar->setValue(0);
+
+}
+....
+}
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+ViewerWidget.h
+#include<QtWidgets/qprogressbar.h>
+
+namespace VirtuosrnD
+{
+
+
+    class ViewerWidget: public QWidget, public osgViewer::CompositeViewer, public QtContextHolder
+    
+    {
+        Q_OBJECT
+        
+        private:
+        QProgressBar* m_progressBar;            //creating a pointer, rmb to use -> instead of =
+        
+        private:
+        void creatProgressBar();
+        
+        signals: 
+        void	onunwrapUV(bool unwrap);
+		void	resetprogressbar(bool reset);
+    }
+
+}
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+ViewerWidget.cpp
+
+Inside the functions of unwrapUV() and finishunwrap(), include emit resetprogressbar(true) and emit onunwrapUV(true).
+
+ 
+
 
