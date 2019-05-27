@@ -1,0 +1,298 @@
+Encapsulation
+Encapsulation (also called information hiding) is the process of keeping the details about how an object is implemented hidden away from users of the object. Instead, users of the object access the object through a public interface. 
+In this way, users are able to use the object without having to understand how it is implemented.
+
+variables private, functions public!
+
+Encapsulation via access specifiers
+
+- encapsulated classes are easier to use and reduce the complexity of programs
+- encap classes help protect data and prevent misuse
+_________________________________________________________________________________________
+encap classes protect data
+
+
+class MyString
+{
+    char *m_string; // we'll dynamically allocate our string here
+    int m_length; // we need to keep track of the string length
+};
+
+invariant connection^
+- m_length always equal the length of string held by m_string
+- If m_length were public, anybody could change the length of the string without changing m_string (or vice-versa),
+would put the class into an inconsistent state
+
+- If private, users are forced to use whatever public member functions are available to work with the class
+
+class IntArray
+{
+private:
+    int m_array[10]; // user can not access this directly any more
+ 
+public:
+    void setValue(int index, int value)
+    {
+        // If the index is invalid, do nothing
+        if (index < 0 || index >= 10)
+            return;
+ 
+        m_array[index] = value;
+    }
+};
+^ this protects the integrity of the program
+
+________________________________________________________________________________________________
+encapsulated classes are easier to change
+
+#include <iostream>
+ 
+class Something
+{
+public:
+    int m_value1;
+    int m_value2;
+    int m_value3;
+};
+ 
+int main()
+{
+    Something something;
+    something.m_value1 = 5;
+    std::cout << something.m_value1 << '\n';
+}
+While this program works fine, what would happen if we decided to rename m_value1, or change its type?
+We’d break not only this program, but likely most of the programs that use class Something as well!
+
+This is better: 
+
+#include <iostream>
+ 
+class Something
+{
+private:
+    int m_value1;
+    int m_value2;
+    int m_value3;
+ 
+public:
+    void setValue1(int value) { m_value1 = value; }
+    int getValue1() { return m_value1; }
+};
+ 
+int main()
+{
+    Something something;
+    something.setValue1(5);
+    std::cout << something.getValue1() << '\n';
+    
+}
+-------------------------------------------------------------------------------------
+Implementation 
+
+#include <iostream>
+ 
+class Something
+{
+private:
+    int m_value[3]; // note: we changed the implementation of this class!
+ 
+public:
+    // We have to update any member functions to reflect the new implementation
+    void setValue1(int value) { m_value[0] = value; }
+    int getValue1() { return m_value[0]; }
+};
+ 
+int main()
+{
+    // But our program still works just fine!
+    Something something;
+    something.setValue1(5);
+    std::cout << something.getValue1() << '\n';
+}
+
+Access functions
+class MyString
+{
+private:
+    char *m_string; // we'll dynamically allocate our string here
+    int m_length; // we need to keep track of the string length
+ 
+public:
+    int getLength() { return m_length; } // access function to get value of m_length
+};
+
+-------------------------------------------------------------------------------
+Setters and getters
+
+Setters (also sometimes called mutators) are functions that set the value of a private member variable.
+
+Here’s a sample class that has getters and setters for all of its members:
+
+
+class Date
+{
+private:
+    int m_month;
+    int m_day;
+    int m_year;
+ 
+public:
+    int getMonth() { return m_month; } // getter for month
+    void setMonth(int month) { m_month = month; } // setter for month
+ 
+    int getDay() { return m_day; } // getter for day
+    void setDay(int day) { m_day = day; } // setter for day
+ 
+    int getYear() { return m_year; } // getter for year
+    void setYear(int year) { m_year = year; } // setter for year
+};
+
+**getters should only provide "read-only" access to data
+____________________________________________________________________________________________________
+
+Constructors
+
+******
+The primary purpose is to initialize objects that have just been created. 
+The secondary purpose is to determine whether creation of an object is allowed.
+That is, an object of a class can only be created if a matching constructor can be found. 
+This means that a class without any public constructors can’t be created!
+
+- special kind of class member fn that r automatically called when objct of that class in instantiated
+1. Constructors must have the same name as the class (with the same capitalization)
+2. Constructors have no return type (not even void)
+
+#include <iostream>
+ 
+class Fraction
+{
+private:
+    int m_numerator;
+    int m_denominator;
+ 
+public:
+    Fraction() // default constructor
+    {
+         m_numerator = 0;
+         m_denominator = 1;
+    }
+ 
+    int getNumerator() { return m_numerator; }
+    int getDenominator() { return m_denominator; }
+    double getValue() { return static_cast<double>(m_numerator) / m_denominator; }
+};
+ 
+int main()
+{
+    Fraction frac; // Since no arguments, calls Fraction() default constructor
+    std::cout << frac.getNumerator() << "/" << frac.getDenominator() << '\n';
+ 
+    return 0;
+}
+
+____________________________________________________________________________________________________
+
+Using constructor w parameters
+1. Direct initialization
+
+int x(5); // Direct initialize an integer
+Fraction fiveThirds(5, 3); // Direct initialize a Fraction, calls Fraction(int, int) constructor
+
+2. Uniform initialization //preferred
+
+int x { 5 }; // Uniform initialization of an integer
+Fraction fiveThirds {5, 3}; // Uniform initialization of a Fraction, calls Fraction(int, int) constructor
+
+
+Reduce the deafult contructur 
+
+class Fraction
+{
+private:
+    int m_numerator;
+    int m_denominator;
+ 
+public:
+    // Default constructor
+    Fraction(int numerator=0, int denominator=1)
+    {
+        assert(denominator != 0);
+        m_numerator = numerator;
+        m_denominator = denominator;
+    }
+ 
+    int getNumerator() { return m_numerator; }
+    int getDenominator() { return m_denominator; }
+    double getValue() { return static_cast<double>(m_numerator) / m_denominator; }
+    
+    -------------------------------------------------------------------------------------------------
+    class Date
+{
+    public:
+    Date() // implicitly generated constructor
+}    
+    
+    int main()
+{
+    Date date; // calls implicit constructor
+ 
+}
+
+____________________________________________________________________________
+
+Member initialization
+
+class Something
+{
+private:
+    int m_value1;
+    double m_value2;
+    char m_value3;
+ 
+public:
+    Something()
+    {
+        // These are all assignments, not initializations
+        m_value1 = 1;
+        m_value2 = 2.2;
+        m_value3 = 'c';
+    }
+};
+
+int value1 = 1; // copy initialization
+double value2(2.2); // direct initialization
+char value3 {'c'}; // uniform initialization, preferred!!!
+
+---------------------------------------------------------------------------------------
+Initializing member variables that are classes
+
+#include <iostream>
+ 
+class A
+{
+public:
+    A(int x) { std::cout << "A " << x << "\n"; }
+};
+ 
+class B
+{
+private:
+    A m_a;
+public:
+    B(int y)
+         : m_a(y-1) // call A(int) constructor to initialize member m_a
+    {
+        std::cout << "B " << y << "\n";
+    }
+};
+ 
+int main()
+{
+    B b(5);
+    return 0;
+}
+
+
+
+
