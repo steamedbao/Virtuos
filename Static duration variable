@@ -1,0 +1,65 @@
+global variables are evil.
+
+Protect yourself from global destruction by naming them with a g_ at the start.
+
+____________________________________________________________________________________
+
+Static duration variables are only created (and initialized) once, and then they are persisted throughout the life of the program
+
+using normal variable
+
+#include <iostream>
+ 
+void incrementAndPrint()
+{
+    int value = 1; // automatic duration by default
+    ++value;
+    std::cout << value << '\n';
+} // value is destroyed here
+ 
+int main()
+{
+    incrementAndPrint();
+    incrementAndPrint();
+    incrementAndPrint();
+ 
+    return 0;
+}
+
+-------------------------------------------------------------------------
+
+using static duration variable
+
+#include <iostream>
+ 
+void incrementAndPrint()
+{
+    static int s_value = 1; // static duration via static keyword.  This line is only executed once.
+    ++s_value;
+    std::cout << s_value << '\n';
+} // s_value is not destroyed here, but becomes inaccessible
+ 
+int main()
+{
+    incrementAndPrint();
+    incrementAndPrint();
+    incrementAndPrint();
+ 
+    return 0;
+}
+
+Static variable are not destroyed when out of scope, but they also cannot be changed by other functions like how global variables can.
+
+***
+When applied to a global variable, the static keyword defines the global variable as having internal linkage,
+meaning the variable cannot be exported to other files.
+
+When applied to a local variable, the static keyword defines the local variable as having static duration, 
+meaning the variable will only be created once, and will not be destroyed until the end of the program.
+
+________________________________________________________________________________________________________________________________________
+
+
+
+
+
