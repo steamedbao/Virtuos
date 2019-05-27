@@ -297,9 +297,3 @@ int main()
 ____________________________________________________________________________________________________________________
 
 
-
-Encapsulation
-Encapsulation (also called information hiding) is the process of keeping the details about how an object is implemented hidden away from users of the object. Instead, users of the object access the object through a public interface. 
-In this way, users are able to use the object without having to understand how it is implemented.
-
-Encapsulation via access specifiers
