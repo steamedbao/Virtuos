@@ -1,0 +1,50 @@
+Heriarchy
+The lower one inherit certain traits of the higher one.
+
+Inheritance
+In an inheritance (is-a) relationship, the class being inherited from is called the parent class, base class, or superclass, 
+and the class doing the inheriting is called the child class, derived class, or subclass
+
+1) single level inheritance     A --> B (base)
+2) Multi level inheritance      A --> B --> C
+3) multiple inheriance          A <-- B --> C
+4) hierarchical inheritance     A --> B <-- C
+5) hybrid inheritance           D <-- C <-- A --> B --> D
+
+public : available everywhere
+private : not available in either base/child
+
+protected access specifier
+--> available between child and base
+
+class base
+{
+public:
+  int x;
+protected:
+  int y;
+private:
+  int z; // not accessible from publicDerived
+
+};
+
+class prtectedDerived: public base
+{
+ //x,y accessible, z no (from 2nd derived class)
+};
+
+class prtectedDerived: protected base
+{
+ //x,y accessible, z no (from 2nd derived class)
+};
+
+class prtectedDerived: private base
+{
+ //x,y and z all inaccessible, because x and y are coverted to private here (from 2nd derived class)
+};
+
+
+****ALL are accessible from own class****
+
+
+
