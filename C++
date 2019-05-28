@@ -21,6 +21,8 @@ int main()
 }
 
 __________________________________________________________
+constexpr int x;  //makes x a compile-time constant - constant initialized at time of compiling
+__________________________________________________________________
 
 If want to use value calculated in a subroutine, that function must not be a void one (won't return any value to operating system).
 
