@@ -1,0 +1,171 @@
+#include "pch.h"
+#include <string>
+#include <iostream>
+class Ball
+{
+private:
+	std::string m_color="black";
+	double m_radius=10.0;
+
+public:
+	// Default constructor with no parameters
+	Ball()
+	{
+		
+	}
+
+	// Constructor with only color parameter (radius will use default value)
+	Ball(const std::string &color):
+		m_color(color)
+	{
+		
+	}
+
+	// Constructor with only radius parameter (color will use default value)
+	Ball(double radius):
+		m_radius(radius)
+	{
+	
+	}
+
+	// Constructor with both color and radius parameters
+	Ball(const std::string &color, double radius):
+		m_color(color), m_radius(radius)
+	{
+		
+	}
+
+	void print()
+	{
+		std::cout << "color: " << m_color << ", radius: " << m_radius << '\n';
+	}
+};
+
+int main()
+{
+	Ball def;
+	def.print();
+
+	Ball blue("blue");
+	blue.print();
+
+	Ball twenty(20.0);
+	twenty.print();
+
+	Ball blueTwenty("blue", 20.0);
+	blueTwenty.print();
+
+	return 0;
+}
+
+___________________________________________________________________________________________________________
+
+Minimise code duplication -> minimise error
+
+
+class Foo
+{
+private:
+    void DoA()
+    {
+        // code to do A
+    }
+ 
+public:
+    Foo()
+    {
+        DoA();
+    }
+ 
+    Foo(int nValue)
+    {
+        DoA();
+        // code to do B
+    }
+ 
+};
+
+
+______________________________________________________________________________
+Destructers
+Another special kind of class member function that is executed when an object of that class is destroyed. 
+Whereas constructors are designed to initialize a class, destructors are designed to help clean up.
+
+~IntArray() // destructor
+	{
+		// Dynamically delete the array we allocated earlier
+		delete[] m_array ;
+	}
+
+Like constructors, destructors have specific naming rules:
+1) The destructor must have the same name as the class, preceded by a tilde (~).
+2) The destructor can not take arguments.
+3) The destructor has no return type.
+
+--------------------------------------------------------------------------------------------------------
+
+class Simple
+{
+private:
+    int m_nID;
+ 
+public:
+    Simple(int nID)
+    {
+        std::cout << "Constructing Simple " << nID << '\n';
+        m_nID = nID;
+    }
+ 
+    ~Simple()
+    {
+        std::cout << "Destructing Simple" << m_nID << '\n';
+    }
+ 
+    int getID() { return m_nID; }
+};
+ 
+int main()
+{
+    // Allocate a Simple on the stack, this type of allocation will automatically trigger destructor function at the end of the main fn
+    Simple simple(1);
+    std::cout << simple.getID() << '\n';
+ 
+    // Allocate a Simple dynamically, will not trigger destructor automatically because the compiler assume you might use the pointer elsewhere too
+    Simple *pSimple = new Simple(2);            // dynamic allocation is a potential reason for memory leak
+    std::cout << pSimple->getID() << '\n';
+    delete pSimple;
+ 
+    return 0;
+} // simple goes out of scope here (auto trigger)
+
+
+
+*** 
+Memory leak is a type of resource leak that occurs when a computer program incorrectly manages 
+memory allocations in such a way that memory which is no longer needed is not released. 
+A memory leak may also happen when an object is stored in memory but cannot be accessed by the running code.
+
+_______________________________________________________________________________________________
+
+RAII (Resource Acquisition Is Initialization) 
+Programming technique whereby resource use is tied to the lifetime of objects with automatic duration 
+(e.g. non-dynamically allocated objects)
+
+- objects holding resources should not be dynamically allocated
+
+- bc destructors are only called when an object is destroyed
+
+- For objects allocated on the stack, this happens automatically when the object goes out of scope, 
+  so there’s no need to worry about a resource eventually getting cleaned up
+  
+- However, for dynamically allocated objects, the user is responsible for deletion
+
+
+*****A warning about the exit() function******
+Note that if you use the exit() function, your program will terminate and no destructors will be called. 
+Be wary if you’re relying on your destructors to do necessary cleanup work 
+(e.g. write something to a log file or database before exiting).
+
+_______________________________________________________________________________________________
+
+
