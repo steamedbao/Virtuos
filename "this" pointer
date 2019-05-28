@@ -1,0 +1,78 @@
+****order of including files is very important!
+
+
+
+//from this
+
+
+
+#include "pch.h"
+#include <iostream>
+
+class Calc
+{
+private:
+    int m_value;
+ 
+public:
+    Calc() { m_value = 0; }
+ 
+    void add(int value) { m_value += value; }
+    void sub(int value) { m_value -= value; }
+    void mult(int value) { m_value *= value; }
+ 
+    int getValue() { return m_value; }
+};
+
+int main()
+{
+    Calc calc;
+    calc.add(5); // returns void
+    calc.sub(3); // returns void
+    calc.mult(4); // returns void
+ 
+    std::cout << calc.getValue() << '\n';
+    return 0;
+}
+
+
+
+
+
+//to this
+
+
+
+
+
+#include "pch.h"
+#include <iostream>
+
+
+using namespace std;
+
+class Calc
+{
+private:
+	int m_id;
+public:
+	Calc()
+	{
+		m_id = 0;
+	}
+	Calc& add(int value) { m_id += value; return *this; }
+	Calc& sub(int value) { m_id -= value; return *this; }
+	Calc& mult(int value) { m_id *= value; return *this; }
+
+	int getValue() { return m_id; }
+
+};
+
+int main()
+{
+	Calc calc;
+	calc.add(5).sub(3).mult(2);
+	std::cout << calc.getValue() << "\n";
+	return 0;
+
+}
