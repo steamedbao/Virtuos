@@ -1,0 +1,34 @@
+To get cout to accept a Date object after the insertion operator, 
+overload the insertion operator to recognize an ostream object on the left and a Date on the right.
+The overloaded << operator function must then be declared as a friend of class Date 
+so it can access the private data within a Date object.
+
+
+#include <iostream>
+using namespace std;
+
+class Date
+{
+    int mo, da, yr;
+public:
+    Date(int m, int d, int y)
+    {
+        mo = m; da = d; yr = y;
+    }
+    friend ostream& operator<<(ostream& os, const Date& dt);
+};
+
+ostream& operator<<(ostream& os, const Date& dt)
+{
+    os << dt.mo << '/' << dt.da << '/' << dt.yr;
+    return os;
+}
+
+int main()
+{
+    Date dt(5, 6, 92);
+    cout << dt;
+}
+
+
+//output: 5/6/92
