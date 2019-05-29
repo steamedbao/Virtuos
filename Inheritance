@@ -46,5 +46,58 @@ class prtectedDerived: private base
 
 ****ALL are accessible from own class****
 
+_________________________________________________________________________________________________________
 
+How are derived class constructed?
+First, the most-base class constructed first, 
+then each child class is constructed in order, 
+until the most-child class is constructed last.
+
+
+look at this to revise how parent child inheritance chain works:
+
+#include <iostream>
+class A {
+public:
+	A(int a)
+	{
+		std::cout << "A:" << a << '\n';
+
+	}
+
+};
+
+class B : public A
+{
+public:
+	B(int a, double b)
+		:A(a)
+	{
+		std::cout << "B:" << b << '\n';
+	}
+};
+
+class C : public B
+{
+public:
+	C(int a, double b, char c)
+		:B(a, b)
+	{
+	std::cout << "C:" << c << '\n';
+
+	}
+};
+
+int main()
+{
+	A a(1);
+	B b(2, 3.1);
+	C c(5, 4.3, 'R');
+	system("PAUSE");
+}
+
+_________________________________________________________________________________________________________
+
+When derived class is destroyed, each destructor is called in reverse order of construction. 
+So for above example, when C is destroyed, C destructor is called first, then B destructor, then A des.
 
