@@ -1,0 +1,320 @@
+Function overloading: 
+Allows us to crate multiple fn with same name, so long they have different parameters
+
+int addInteger(int x, int y)
+{
+    return x + y;
+}
+ 
+double addDouble(double x, double y)
+{
+    return x + y;
+}
+
+
+In C++, the arithmetic operators have higher precedence than operator^, so 4 + 3 ^ 2 resolves as (4 + 3) ^ 2 => 7 ^ 2 => 49.
+
+3 diff ways to overload: Member function way, friend function way, normal function way
+
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+Friend function
+
+Example:
+
+#include <iostream>
+
+class Cents
+{
+private:
+	int m_cents;
+public: 
+	Cents(int cents) { m_cents = cents; }
+	friend Cents operator+(const Cents &c1, const Cents &c2);
+	friend Cents operator+(const Cents &c1, int value);
+
+	friend Cents operator-(const Cents &c1, const Cents &c2);
+	friend Cents operator+(int value, const Cents & c1);
+	
+	int getCents() const { return m_cents; }
+};
+
+Cents operator + (const Cents &c1, const Cents &c2)
+{
+	return Cents(c1.m_cents + c2.m_cents);
+}
+
+Cents operator +(const Cents &c1, int value)
+{
+	return Cents(c1.m_cents +  value);
+}
+
+Cents operator - (const Cents &c1, const Cents &c2)
+{
+	return Cents(c1.m_cents - c2.m_cents);
+}
+
+Cents operator +(int value, const Cents &c1)
+{
+	return Cents(value + c1.m_cents);
+}
+
+int main()
+{
+	Cents cents1(6);
+	Cents cents2(8);
+	Cents c1 = Cents(4) + 6;
+	Cents centsSum = cents1 - cents2;
+	std::cout << "I have " << centsSum.getCents() << "cents." ;
+	std::cout << "I have " << c1.getCents() << "cents.";
+
+	while (1)
+	{
+	}
+}
+
+——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+
+example 2
+
+#include <iostream>
+
+class MinMax
+{
+private:
+	int m_min;
+	int m_max;
+public:
+	MinMax(int min, int max)
+	{
+		m_min = min;
+		m_max = max;
+	}
+
+	int getMin() { return m_min; }
+	int getMax() { return m_max; }
+
+	friend MinMax operator+(const MinMax&m1, const MinMax &m2);
+	friend MinMax operator+(const MinMax &m, int value);
+	friend MinMax operator+(int value, const MinMax &m);
+
+};
+
+MinMax operator+(const MinMax &m1, const MinMax &m2)
+{
+	int min = m1.m_min < m2.m_min ? m1.m_min : m2.m_min;
+	int max = m1.m_max > m2.m_max ? m1.m_max : m2.m_max;
+	return MinMax(min, max);
+}
+
+MinMax operator+(const MinMax &m, int value)
+{
+	int min = m.m_min < value ? m.m_min : value;
+	int max = m.m_max > value ? m.m_max : value;
+	return MinMax(min, max);
+}
+
+MinMax operator+(int value, const MinMax &m)
+{
+	int min = value < m.m_min ? value : m.m_min;
+	int max = value > m.m_max ? value : m.m_max;
+	return MinMax(min, max);
+
+}
+
+int main() {
+	MinMax m1(10, 15);
+	MinMax m2(8, 11);
+	MinMax m3(3, 12);
+	MinMax mFinal = m1 + m2 + 5 + 8 + m3 + 16;
+
+	std::cout << "Result : (" << mFinal.getMin() << ", " << mFinal.getMax() << ")\n";
+	system("PAUSE");
+
+}
+
+_____________________________________________________________________________________________________________
+
+Quiz code
+
+#include <iostream>
+
+class Fraction
+{
+private:
+	int denominator;
+	int numerator;
+public:
+	Fraction(int n, int d)
+	{
+		numerator = n;
+		denominator = d;
+		reduce();
+	}
+
+	int gcd(int a, int b) {
+		return (b == 0) ? (a > 0 ? a : -a) : gcd(b, a % b);
+	}
+
+	void reduce()
+	{
+		int x = gcd(numerator, denominator);
+		numerator /= x;
+		denominator /= x;
+	}
+
+	friend Fraction operator*(const Fraction &f1, const  Fraction &f2);
+	friend Fraction operator *(int value, const Fraction &f);
+	friend Fraction operator *(const Fraction &f, int value);
+
+	void print()
+	{
+		std::cout << numerator << "/" << denominator << "\n";
+	}
+
+};
+
+
+
+Fraction operator*(const Fraction &f1, const Fraction &f2)
+{
+	return Fraction(f1.numerator *f2.numerator, f1.denominator*f2.denominator);
+
+}
+
+Fraction operator *(int value, const Fraction &f)
+{
+return Fraction(value *f.numerator, f.denominator);
+}
+
+Fraction operator *(const Fraction &f, int value)
+{
+	return Fraction(value *f.numerator, f.denominator);
+}
+
+int main()
+{
+	Fraction f1(2, 5);
+	f1.print();
+
+	Fraction f2(3, 8);
+	f2.print();
+
+	Fraction f3 = f1 * f2;
+	f3.print();
+
+	Fraction f4 = f1 * 2;
+	f4.print();
+
+	Fraction f5 = 2 * f2;
+	f5.print();
+
+	Fraction f6 = Fraction(1, 2) * Fraction(2, 3) * Fraction(3, 4);
+	f6.print();
+	system("PAUSE");
+}
+
+
+___________________________________________________________________________________________________________________
+
+Another quiz code
+
+#include <iostream>
+ 
+class Fraction
+{
+private:
+	int m_numerator;
+	int m_denominator;
+ 
+public:
+	Fraction(int numerator=0, int denominator=1):
+		m_numerator(numerator), m_denominator(denominator)
+	{
+		// We put reduce() in the constructor to ensure any new fractions we make get reduced!
+		// Any fractions that are overwritten will need to be re-reduced
+		reduce();
+	}
+ 
+	// We'll make gcd static so that it can be part of class Fraction without requiring an object of type Fraction to use
+	static int gcd(int a, int b)
+	{
+		return b == 0 ? a : gcd(b, a % b);
+	}
+ 
+	void reduce()
+	{
+		int gcd = Fraction::gcd(m_numerator, m_denominator);
+		m_numerator /= gcd;
+		m_denominator /= gcd;
+	}
+ 
+	friend Fraction operator*(const Fraction &f1, const Fraction &f2);
+	friend Fraction operator*(const Fraction &f1, int value);
+	friend Fraction operator*(int value, const Fraction &f1);
+ 
+	void print()
+	{
+		std::cout << m_numerator << "/" << m_denominator << "\n";
+	}
+};
+ 
+Fraction operator*(const Fraction &f1, const Fraction &f2)
+{
+	return Fraction(f1.m_numerator * f2.m_numerator, f1.m_denominator * f2.m_denominator);
+}
+ 
+Fraction operator*(const Fraction &f1, int value)
+{
+	return Fraction(f1.m_numerator * value, f1.m_denominator);
+}
+ 
+Fraction operator*(int value, const Fraction &f1)
+{
+	return Fraction(f1.m_numerator * value, f1.m_denominator);
+}
+
+________________________________________________________________________________________________________
+
+Converting a friend overloaded operator to a member overloaded operator is easy:
+
+The overloaded operator is defined as a member instead of a friend (Cents::operator+ instead of friend operator+)
+The left parameter is removed, because that parameter now becomes the implicit *this object.
+Inside the function body, all references to the left parameter can be removed (e.g. cents.m_cents becomes m_cents, which implicitly references the *this object).
+
+example
+
+#include <iostream>
+ 
+class Cents
+{
+private:
+    int m_cents;
+ 
+public:
+    Cents(int cents) { m_cents = cents; }
+ 
+    // Overload Cents + int
+    Cents operator+(int value);
+ 
+    int getCents() { return m_cents; }
+};
+ 
+// note: this function is a member function!
+// the cents parameter in the friend version is now the implicit *this parameter
+Cents Cents::operator+(int value)
+{
+    return Cents(m_cents + value);
+}
+ 
+int main()
+{
+	Cents cents1(6);
+	Cents cents2 = cents1 + 2;
+	std::cout << "I have " << cents2.getCents() << " cents.\n";
+ 
+	return 0;
+}
+
+________________________________________________________________________________________________________
+
