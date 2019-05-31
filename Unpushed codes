@@ -1,0 +1,3572 @@
+/***************************************************************************************
+ *prototype1.cpp
+ * Copyright (C) 2018-2019 VIRTUOS HOLDING PTE. LTD.
+ *
+ * This file is part of UV MAPPING TOOL.
+ *
+ * UV MAPPING TOOL can not be copied and/or distributed without the express
+ * permission of VIRTUOS HOLDING PTE. LTD.
+ *
+ ***************************************************************************************/
+
+
+#include <QStandardPaths>
+#include <QtGui\qevent.h>
+#include <QtCore\QObject>
+#include <string>
+#include <sstream>
+#include <iostream>
+
+#include <QtWidgets\QMenu>
+#include <QtWidgets\QMenubar>
+#include <QtWidgets\QFileDialog>
+#include <QtWidgets\QToolbar>
+#include <QtWidgets\QCheckBox>
+#include <QtWidgets\QComboBox>
+#include <QtWidgets\QLineEdit>
+#include <QtWidgets\QSlider>
+#include <QtWidgets\QGridLayout>
+#include <QtWidgets\QToolButton>
+#include <QtWidgets\QMainWindow>
+#include <QtWidgets\QTextEdit>
+#include <QtWidgets\QGroupBox>
+#include <QtWidgets\QFormLayout>
+#include <QtWidgets\QListWidget>
+#include <QtWidgets\QRadioButton>
+#include <QtWidgets\QSlider>
+#include <QtWidgets\QScrollBar>
+#include <QtWidgets\QDial>
+#include <QtWidgets\QScrollArea>
+#include <QtWidgets\QDesktopWidget>
+#include <QtWidgets\QDockWidget>
+#include <QtGUI\QStandardItemModel>
+#include <QtWidgets/qprogressbar.h>
+#include <QtWidgets/qprogressdialog.h>
+#include <qtimer.h>
+
+#include "BaseTypes.h"
+#include "SlidersGroup.h"
+#include "Edge.h"
+#include "ViewerStatsHandler.h"
+#include "viewerwidget.h"
+#include "Prototype1.h"
+#include "groupSelectionHandler.h"
+#include "AboutDialog.h"
+#include "PreferenceDialog.h"
+
+
+
+
+
+using namespace std;
+using namespace osg;
+using namespace osgQt;
+
+namespace VirtuosRnD
+{
+
+osgViewerQt::osgViewerQt(ArgumentParser& arguments) :
+	m_operationMode(OPERATION_SELECT),
+	m_uvEditor(NULL),
+	m_unwrapToolBar(NULL)
+{
+	osgViewer::ViewerBase::ThreadingModel threadingModel = osgViewer::ViewerBase::SingleThreaded;
+
+#if QT_VERSION >= 0x040800
+	if (threadingModel != osgViewer::ViewerBase::SingleThreaded)
+		QApplication::setAttribute(Qt::AA_X11InitThreads);
+#endif
+	
+	m_viewer = ViewerWidget::create(arguments, this, Qt::Widget, threadingModel);
+	setCentralWidget(m_viewer);
+	createToolBar();
+	createMenu();
+
+	/*QApplication::setStyle("cleanlooks");*/
+
+	m_viewer->setMinimumSize(QSize(200, 100));
+
+
+
+	QCoreApplication::instance()->installEventFilter(this);
+
+	// about box instance
+	m_about = new AboutDialog;
+
+	// the preference dialog instance
+	m_preferences = new PreferenceDialog;
+
+	//connect(m_viewer, &ViewerWidget::onloadTexture, this, &osgViewerQt::timercount);
+	//connect(m_viewer, &ViewerWidget::onclearTexture, this, &osgViewerQt::timercount);
+	connect(m_viewer, &ViewerWidget::onunwrapUV, this, &osgViewerQt::timercount);
+	connect(m_viewer, &ViewerWidget::resetprogressbar, this, &osgViewerQt::onresetprogressbar);
+
+}
+
+void osgViewerQt::createProgressBar()
+{
+	m_progressBar = new QProgressBar;
+	m_progressBar->setMinimum(0);
+	m_progressBar->setMaximum(100);
+	m_progressBar->setValue(0);
+
+}
+
+
+void osgViewerQt::timercount(bool count)
+{
+
+	timer = new QTimer;
+	connect(timer, &QTimer::timeout, this, &osgViewerQt::updateprogressbar);
+	timer->start(1);
+
+}
+
+void osgViewerQt::updateprogressbar()
+{
+	int counter=0;
+	while (counter <= 69)
+	{
+		counter++;
+		m_progressBar->setValue(counter);
+	}
+	timer->stop();
+
+}
+
+void osgViewerQt::onresetprogressbar(bool reset)
+{
+
+	m_progressBar->setValue(80);
+	Sleep(50);
+	m_progressBar->setValue(90);
+	Sleep(50);
+	m_progressBar->setValue(100);
+	Sleep(200);
+	m_progressBar->setValue(0);
+
+}
+
+
+void osgViewerQt::closeEvent(QCloseEvent *event)
+{
+	if (m_viewer->getUnwrapComputeThreadRunning())
+	{
+		QMessageBox m;
+		m.setIcon(QMessageBox::Icon::Critical);
+		m.setText("A uv unwrap process is still running! Please wait for it to terminate before closing!");
+		m.setStandardButtons(QMessageBox::StandardButton::Ok);
+		m.exec();
+		event->ignore();
+		return;
+	}
+
+	if (m_viewer->getSaveRequired())
+	{
+		QMessageBox message;
+		message.setIcon(QMessageBox::Icon::Warning);
+		message.setStandardButtons(QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+		message.setDefaultButton(QMessageBox::Cancel);
+		message.setText(tr("Warning: Your current model has been modified."));
+		message.setInformativeText(tr("Do you wish to save your changes?"));
+
+		int result = message.exec();
+
+		if (result == QMessageBox::Save)
+			m_viewer->saveMesh();
+		else if (result == QMessageBox::Cancel)
+		{
+			event->ignore();
+			return;
+		}
+	}
+
+	auto uvWindow = this->getViewer()->getUVWindow();
+	if (uvWindow != nullptr)
+		uvWindow->close();
+
+	auto outlinerWindow = this->getViewer()->getOutlinerWindow();
+	if (outlinerWindow != nullptr)
+		outlinerWindow->close();
+
+	//TODO: Find a way to terminate this
+	//connect(this, SIGNAL(onCloseCleanUpThreads()), m_viewer, SLOT(onCloseEventCleanUpThreads()));
+	//emit onCloseCleanUpThreads();
+}
+
+osgViewerQt::~osgViewerQt()
+{
+	delete m_selectModeComboBox;
+	delete m_groupSelectionHandler;
+	delete m_viewer;
+	delete m_about;
+	delete m_preferences;
+}
+
+void osgViewerQt::createMenu()
+{
+	QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
+	//QPalette pal = palette();
+	//pal.setColor(QPalette::Background, Qt::black);
+	////fileMenu->setAutoFillBlackground(true);
+	//fileMenu->setPalette(pal);
+	//fileMenu->show();
+	m_openAct = fileMenu->addAction(tr("&Open..."), this, &osgViewerQt::loadMesh);
+	m_saveAct = fileMenu->addAction(tr("&Save..."), this, &osgViewerQt::saveMesh);
+	QAction *preferencesAct = fileMenu->addAction(tr("&Preferences..."), this, &osgViewerQt::preferences);
+	fileMenu->addSeparator();
+	QAction *exitAct = fileMenu->addAction(tr("&Exit..."), this, &osgViewerQt::close);
+
+	m_selectionMenu = menuBar()->addMenu(tr("&Selection"));
+	QMenu* groupsMenu = m_selectionMenu->addMenu(tr("&Groups..."));
+
+	groupsMenu->setObjectName(QString("GroupsMenu"));
+
+	m_groupSelectionHandler = new GroupSelectionHandler(this);
+
+	QAction *groupsCreateGroupMenu = groupsMenu->addAction(tr("&Create Group..."), m_groupSelectionHandler, &GroupSelectionHandler::createGroup);
+	QAction *groupsSaveJsonMenu = groupsMenu->addAction(tr("&Save to JSON"), m_groupSelectionHandler, &GroupSelectionHandler::saveGroup);
+	QAction *groupsLoadJsonMenu = groupsMenu->addAction(tr("&Load from JSON"), m_groupSelectionHandler, &GroupSelectionHandler::loadGroup);
+	QAction *groupsClearGroupMenu = groupsMenu->addAction(tr("&Clear Groups"), m_groupSelectionHandler, &GroupSelectionHandler::clearGroup);
+	groupsMenu->addSeparator();
+
+
+	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
+	QAction* aboutPage = helpMenu->addAction(tr("&About page"), this, &osgViewerQt::updateprogressbar);
+}
+
+
+
+
+void osgViewerQt::createToolBar()
+{
+	QToolBar* viewBar = addToolBar(tr("View"));
+	QPalette pal = palette();
+	pal.setColor(QPalette::Background, Qt::black);
+	viewBar->setPalette(pal);
+	viewBar->show();
+
+	//Icon from https://www.flaticon.com/authors/smashicons
+
+	m_openButton = createToolButton(tr("Resources/open.png"), tr("Open\n"), &osgViewerQt::loadMesh);
+	viewBar->addWidget(m_openButton);
+	m_saveButton = createToolButton(tr("Resources/save.png"), tr("Save\n"), &osgViewerQt::saveMesh);
+	viewBar->addWidget(m_saveButton);
+
+	viewBar->addSeparator();
+	m_selectButton = createToolButton(tr("Resources/select.png"), tr("Select\n"), &osgViewerQt::selectOperation);
+	viewBar->addWidget(m_selectButton);
+	m_selectButton->setCheckable(true);
+	m_selectButton->setChecked(true);
+	m_moveButton = createToolButton(tr("Resources/move.png"), tr("Move\n"), &osgViewerQt::moveOperation);
+	viewBar->addWidget(m_moveButton);
+	m_moveButton->setCheckable(true);
+	m_moveButton->setEnabled(false);
+	m_rotateButton = createToolButton(tr("Resources/rotate.png"), tr("Rotate\n"), &osgViewerQt::rotateOperation);
+	viewBar->addWidget(m_rotateButton);
+	m_rotateButton->setCheckable(true);
+	m_rotateButton->setEnabled(false);
+	m_scaleButton = createToolButton(tr("Resources/scale.png"), tr("Scale\n"), &osgViewerQt::scaleOperation);
+	viewBar->addWidget(m_scaleButton);
+	m_scaleButton->setCheckable(true);
+	m_scaleButton->setEnabled(false);
+
+	m_selectModeComboBox = new QComboBox();
+	viewBar->addWidget(m_selectModeComboBox);
+	m_selectModeComboBox->addItem(QIcon(tr("Resources/vertex.png")), tr("Vertex"));
+	m_selectModeComboBox->addItem(QIcon(tr("Resources/edge.png")), tr("Edge"));
+	m_selectModeComboBox->addItem(QIcon(tr("Resources/face.png")), tr("Face"));
+	m_selectModeComboBox->addItem(QIcon(tr("Resources/submesh.png")), tr("Submesh"));
+	m_selectModeComboBox->setIconSize(QSize(32, 32));
+	connect(m_selectModeComboBox, SIGNAL(currentIndexChanged(int)), SLOT(selectModeChanged(int)));
+	
+	viewBar->addSeparator();
+
+	m_wireframeButton = createToolButton(tr("Resources/wireframe.png"), tr("Wire\n-frame"), &osgViewerQt::toggleWireframe);
+	viewBar->addWidget(m_wireframeButton);
+	m_wireframeButton->setCheckable(true);
+	m_wireframeButton->setChecked(false);
+
+	m_textureButton = createToolButton(tr("Resources/texture.png"), tr("Display\nTexture"), &osgViewerQt::toggleTexture);
+	viewBar->addWidget(m_textureButton);
+	m_textureButton->setCheckable(true);
+	m_textureButton->setChecked(true);
+
+	viewBar->addWidget(createToolButton(tr("Resources/stats.png"), tr("Toggle\nStats"), &osgViewerQt::toggleStats));
+
+	viewBar->addWidget(createToolButton(tr("Resources/reset.png"), tr("Reset\n"), &osgViewerQt::resetTransform));
+
+	m_gridlineCheckBox = new QCheckBox(tr("Auto Adjust\nGridline"));
+	viewBar->addWidget(m_gridlineCheckBox);
+	m_gridlineCheckBox->setChecked(true);
+	connect(m_gridlineCheckBox, SIGNAL(stateChanged(int)), SLOT(gridlineModeChanged(int)));
+
+	viewBar->addSeparator();
+	m_uvButton = createToolButton(tr("Resources/uvmap.png"), tr("UV Map"), &osgViewerQt::popupUVEditor);
+	viewBar->addWidget(m_uvButton);
+	m_uvButton->setCheckable(true);
+	m_uvButton->setChecked(false);
+
+	viewBar->addSeparator();
+	m_unwrapMethod = new QComboBox();
+	viewBar->addWidget(m_unwrapMethod);
+	m_unwrapMethod->addItem(tr("LSCM"));
+	m_unwrapMethod->addItem(tr("Face Vertex"));
+	m_unwrapMethod->addItem(tr("OptCuts"));
+	m_unwrapMethod->addItem(tr("UVNormalize"));
+	m_unwrapMethod->addItem(tr("OptCuts + BFF"));
+	m_unwrapMethod->addItem(tr("BFF"));
+	connect(m_unwrapMethod, SIGNAL(currentIndexChanged(int)), SLOT(selectUnwrapMethodChanged(int)));
+
+	//Icon from https://www.flaticon.com/authors/appzgear
+	viewBar->addSeparator();
+	viewBar->addWidget(createToolButton(tr("Resources/tree.png"), tr("Scene\n Outliner"), &osgViewerQt::popupSceneOutliner));
+
+	viewBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+
+	viewBar->addSeparator();
+	m_progressBar = new QProgressBar();
+	createProgressBar();
+
+	viewBar->addWidget(m_progressBar);
+	
+
+}
+
+void osgViewerQt::createUnwrapToolBar()
+{
+	if (m_unwrapToolBar == NULL)
+	{
+		m_unwrapToolBar = addToolBar(tr("UV Unwrap"));
+		//removeToolBar(m_unwrapToolBar);
+		//addToolBar(Qt::RightToolBarArea, m_unwrapToolBar);
+		m_unwrapToolBar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+	}
+	m_unwrapToolBar->show();
+}
+
+QToolButton* osgViewerQt::createToolButton(QString iconPath, QString text, void (osgViewerQt::*slot)())
+{
+	const QIcon icon(iconPath);
+	QToolButton *button = new QToolButton();
+	button->setIcon(icon);
+	button->setText(text);
+	button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+	button->setFixedWidth(50);
+	button->setIconSize(QSize(50, 50));
+	connect(button, &QToolButton::released, this, slot);
+	return button;
+}
+
+void osgViewerQt::loadMesh()
+{	   
+	//QString selfilter = tr("MESH(*.fbx;*.osgt);;FBX(*.fbx);;OSGT(*.osgt)");
+	QString selfilter = tr("FBX(*.fbx)");
+	QString fileName = QFileDialog::getOpenFileName(
+		this,
+		"Open File",
+		tr("../Data/"),
+		selfilter
+	);
+
+	
+	if (fileName != NULL)
+	{
+		QString fileExtension = QFileInfo(fileName).completeSuffix();
+
+		if (QString::compare(fileExtension, tr("fbx"), Qt::CaseInsensitive) != 0)
+		{
+			QMessageBox message;
+			message.setIcon(QMessageBox::Icon::Critical);
+			message.setText(tr("Input file is not of type fbx. Please select a fbx file."));
+			message.exec();
+		}
+		else
+		{
+			m_viewer->loadMesh(fileName);
+			//createProgressBar();
+		}
+	}
+}
+
+
+
+void osgViewerQt::saveMesh()
+{
+	auto loadedModel = this->getViewer()->getModelNamePath();
+
+	QString selfilter = tr("FBX(*.fbx)");
+	QString fileName = QFileDialog::getSaveFileName(
+		this,
+		"Save File",
+		loadedModel.empty() ? tr("../Data/") : QString::fromStdString(loadedModel),
+		selfilter
+	);
+	if (fileName != NULL)
+	{
+		m_viewer->saveMesh(fileName);
+	}
+}
+
+void osgViewerQt::about()
+{
+	m_about->exec();
+}
+
+void osgViewerQt::preferences()
+{
+	m_preferences->exec();
+}
+
+void osgViewerQt::toggleWireframe()
+{
+	bool isChecked = m_wireframeButton->isChecked();
+	m_viewer->setWireframeDisplay(isChecked);
+}
+
+void osgViewerQt::toggleTexture()
+{
+	m_viewer->toggleTextureDisplay();
+}
+
+void osgViewerQt::toggleStats()
+{
+	m_viewer->toggleStatsDisplay();
+}
+
+void osgViewerQt::resetTransform()
+{
+	m_viewer->resetTransform();
+}
+
+
+void osgViewerQt::popupUVEditor()
+{
+	if (m_uvButton->isChecked())
+	{
+		if (m_uvEditor == NULL)
+		{
+			m_uvEditor = new QDockWidget;			
+			if (!m_viewer->popupUVEditor(m_uvEditor))
+			{
+				delete m_uvEditor;
+				m_uvEditor = NULL;
+				m_uvButton->setChecked(false);
+				return;
+			}
+			m_uvEditor->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+			addDockWidget(Qt::RightDockWidgetArea, m_uvEditor);
+			//m_uvEditor->setFloating(true);
+			m_uvEditor->setWindowTitle(tr("UV Editor"));
+			m_uvEditor->setAttribute(Qt::WA_DeleteOnClose);
+			connect(m_uvEditor, &QDockWidget::destroyed, this, &osgViewerQt::uvDestroyed);
+
+		}
+		else
+		{
+			m_uvEditor->setHidden(false);
+		}
+
+		if (m_unwrapToolBar == NULL)
+		{
+			createUnwrapToolBar();
+			m_viewer->updateUnwrapToolBar(m_unwrapToolBar);
+		}
+		else
+		{
+			m_unwrapToolBar->setHidden(false);
+		}
+	}
+	else
+	{
+		m_uvEditor->setHidden(true);
+		m_unwrapToolBar->setHidden(true);
+	}
+}
+
+
+void osgViewerQt::popupSceneOutliner()
+{
+	m_viewer->popupSceneOutliner();
+}
+
+void osgViewerQt::selectModeChanged(int idx)
+{
+	m_viewer->selectModeChanged(idx);
+}
+
+void osgViewerQt::selectUnwrapMethodChanged(int idx)
+{
+	m_viewer->selectUnwrapMethodChanged(idx);
+	if (m_unwrapToolBar != NULL)
+	{
+		m_viewer->updateUnwrapToolBar(m_unwrapToolBar);
+	}
+}
+
+void osgViewerQt::gridlineModeChanged(int idx)
+{
+	bool autoAdjust = m_gridlineCheckBox->checkState();
+	m_viewer->setGridlineMode(autoAdjust);
+}
+
+void osgViewerQt::uvDestroyed()
+{
+	auto a = dockWidgetArea(m_uvEditor);
+	m_viewer->uvEditorDestroyed();
+	removeDockWidget(m_uvEditor);
+	m_uvEditor = NULL;
+	m_uvButton->setChecked(false);
+	if (m_unwrapToolBar != NULL)
+	{
+		m_unwrapToolBar->setHidden(true);
+	}
+}
+
+void osgViewerQt::lockUnwrapDropDown(bool lock)
+{
+	m_unwrapMethod->setEnabled(!lock);
+}
+
+void osgViewerQt::seamEditModeToggle(bool editSeamMode)
+{
+	QFlags<Qt::ItemFlag> flag;
+	if (editSeamMode)
+	{
+		//TODO: Seems weird that SelectMode::<...> has more options that what is offered in combobox
+		constexpr auto mode = 1;
+		m_prevMode = m_selectModeComboBox->currentIndex();
+		m_selectModeComboBox->setCurrentIndex((int)mode);
+		flag = ~(Qt::ItemFlag::ItemIsSelectable | Qt::ItemFlag::ItemIsEnabled);
+	}
+	else
+	{
+		m_selectModeComboBox->setCurrentIndex(m_prevMode);
+		flag = Qt::ItemFlag::ItemIsSelectable | Qt::ItemFlag::ItemIsEnabled;
+	}
+
+
+	QStandardItemModel* model = dynamic_cast<QStandardItemModel*>(m_selectModeComboBox->model());
+	//TODO: Find enum that represents this combobox selection mode
+	/*
+		m_selectModeComboBox->addItem(QIcon(tr("Resources/vertex.png")), tr("Vertex"));			//0
+		m_selectModeComboBox->addItem(QIcon(tr("Resources/edge.png")), tr("Edge"));				//1
+		m_selectModeComboBox->addItem(QIcon(tr("Resources/face.png")), tr("Face"));				//2
+		m_selectModeComboBox->addItem(QIcon(tr("Resources/submesh.png")), tr("Submesh"));		//3
+	*/
+	model->item(0)->setFlags(flag);		//Vertex selection mode
+	model->item(2)->setFlags(flag);		//Face selection mode
+	model->item(3)->setFlags(flag);		//Submesh selection mode
+}
+
+void osgViewerQt::toggleResourceLocks(bool lock)
+{
+	//TODO: Make these into a list of QTObject resource modifiers?
+	m_openButton->setEnabled(!lock);
+	m_saveButton->setEnabled(!lock);
+	m_openAct->setEnabled(!lock);
+	m_saveAct->setEnabled(!lock);
+	m_selectionMenu->setEnabled(!lock);
+	
+}
+
+void osgViewerQt::selectOperation()
+{
+	//QApplication::setOverrideCursor(Qt::CrossCursor);
+	m_viewer->setSelectMode(true);
+	if (m_operationMode == OPERATION_SELECT)
+	{
+		m_selectButton->setChecked(true);
+	}
+	else
+	{
+		m_operationMode = OPERATION_SELECT;
+		m_moveButton->setChecked(false);
+		m_rotateButton->setChecked(false);
+		m_scaleButton->setChecked(false);
+	}
+}
+
+void osgViewerQt::moveOperation()
+{
+	if (m_operationMode == OPERATION_MOVE)
+	{
+		m_moveButton->setChecked(true);
+	}
+	else
+	{
+		m_operationMode = OPERATION_MOVE;
+		m_selectButton->setChecked(false);
+		m_rotateButton->setChecked(false);
+		m_scaleButton->setChecked(false);
+	}
+}
+
+void osgViewerQt::rotateOperation()
+{
+	if (m_operationMode == OPERATION_ROTATE)
+	{
+		m_rotateButton->setChecked(true);
+	}
+	else
+	{
+		m_operationMode = OPERATION_ROTATE;
+		m_selectButton->setChecked(false);
+		m_moveButton->setChecked(false);
+		m_scaleButton->setChecked(false);
+	}
+}
+
+void osgViewerQt::scaleOperation()
+{
+	if (m_operationMode == OPERATION_SCALE)
+	{
+		m_scaleButton->setChecked(true);
+	}
+	else
+	{
+		m_operationMode = OPERATION_SCALE;
+		m_selectButton->setChecked(false);
+		m_moveButton->setChecked(false);
+		m_rotateButton->setChecked(false);
+	}
+}
+
+}
+
+________________________________________________________________________
+/***************************************************************************************
+ *ViewerWidget.h
+ * Copyright (C) 2018-2019 VIRTUOS HOLDING PTE. LTD.
+ *
+ * This file is part of UV MAPPING TOOL.
+ *
+ * UV MAPPING TOOL can not be copied and/or distributed without the express
+ * permission of VIRTUOS HOLDING PTE. LTD.
+ *
+ ***************************************************************************************/
+
+#ifndef VIEWER_WIDGET_HEADER
+#define VIEWER_WIDGET_HEADER
+
+#include <QObject>
+#include <QTimer>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QGridLayout>
+#include <QtWidgets/QFrame>
+#include <QtWidgets/Qmenu>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QToolButton>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QMessageBox>
+#include <QtWidgets/QToolBar>
+#include <QtWidgets/QDockWidget>
+#include <QtWidgets/QTreeWidget>
+#include <QtConcurrent/QtConcurrentRun>
+#include <QtWidgets\QComboBox>
+#include<QtWidgets/qprogressbar.h>
+
+#include <osg/Point>
+#include <osg/LineWidth>
+#include <osg/BlendFunc>
+#include <osgViewer/CompositeViewer>
+#include <osgViewer/ViewerEventHandlers>
+#include <osgGA/StateSetManipulator>
+#include <osgGA/OrbitManipulator>
+#include <osgDB/ReadFile>
+#include <osg/PolygonOffset>
+
+#include "GraphicsView.h"
+#include "SelectRect.h"
+#include "SelectedObjects.h"
+
+#include "ViewerStatsHandler.h"
+#include "UVManipulator.h"
+#include "UVMapView.h"
+
+#include "OutlinerDialog.h"
+
+//#include <QtGui/QKeyEvent>
+
+#include "QtUnwrapContainer.h"
+#include "QtDialogSignalHandler.h"
+#include "QtDialogSignalEmitter.h"
+#include "QtContextHolder.h"
+#include <QtWidgets/qapplication.h>
+
+//Preprocessor setting per build
+#ifndef BUILD_CONFIGURATION_STR
+#define BUILD_CONFIGURATION_STR "unsupported build configuration"
+#endif
+
+
+//TODO: Macro for production build
+#define APPLICATION_NAME "Prototype1"
+#define APPLICATION_NAME_FULL APPLICATION_NAME "(" BUILD_CONFIGURATION_STR ")"
+
+namespace VirtuosRnD
+{
+
+	class ColorRenderer;
+	class ViewerManipulator;
+	class FaceVisitorWorld;
+	class EdgeVisitorWorld;
+	class VertexVisitorWorld;
+	class BaseUnwrapHandler;
+	class GeometryVisitor;
+
+
+	class ViewerWidget : public QWidget, public osgViewer::CompositeViewer, public QtContextHolder
+	{
+		Q_OBJECT
+
+	private:
+		enum ViewFunction
+		{
+			MESHVIEWER,
+			UVEDITOR
+		};
+
+		bool			m_debugMode;
+		std::string		m_fileName;
+		bool			m_saveRequired = false;
+		QString			m_windowTitle = tr(APPLICATION_NAME_FULL);
+
+		bool			m_wireframe;
+		bool			m_textureMode;
+		SelectMode		m_selectMode;
+		bool			m_autoGridline;
+
+		std::map<int, osgViewer::View*>				m_viewMap;
+
+		const ViewerManipulator* m_viewerManipulator;
+		ViewerStatsHandler* m_viewerStatsHandler;
+
+		UVManipulator *m_uvManipulator;
+
+		std::set<int>		m_keyStack;
+		bool				m_keyReleased;
+		KeyModifierMode		m_keyModifierMode;
+
+		QWidget*		m_uvEditor;
+		QDockWidget*		m_uvWindow;
+		struct	m_uvTools
+		{
+			QPushButton* load;
+			QPushButton* clear;
+			QPushButton* reset;
+			QPushButton* unwrap;
+			QLabel* emptySpaceLabel;
+			QLineEdit* emptySpace;
+			QPushButton* areaDistortion;
+			QPushButton* angleDistortion;
+			QWidget* container;
+			QWidget* seamEditorWidget;
+			QLabel* packingMethodLabel;
+			QComboBox* packingMethod;
+			QLabel* islandSpacingLabel;
+			QDoubleValidator* spacingValidator;
+			QLineEdit* islandSpacing;
+
+		} m_uvTools;
+		
+		QProgressBar*	m_progressBar;
+		QToolButton*	m_editBoundaryButton;
+		QLabel*			m_editBoundaryLabel;
+
+		OutlinerDialog*		m_outLiner;
+		
+		//TODO: What is this comment?
+		// Singleton for selected geometries
+		SelectedObjects		m_selectedGeometries;
+
+		//TODO: What is this comment?
+		// Singleton for current data in Outliner view
+		GraphData	m_activeData;
+
+		//Texture
+		osg::ref_ptr<osg::Texture2D>		m_texture;
+
+		QTimer _timer;
+
+
+	private:
+		ViewerWidget
+		(
+			osg::ArgumentParser& arguments,
+			QWidget* parent = 0,
+			Qt::WindowFlags f = 0,
+			osgViewer::ViewerBase::ThreadingModel threadingModel = osgViewer::CompositeViewer::SingleThreaded
+		);
+
+
+	public:
+		static ViewerWidget* create(osg::ArgumentParser& arguments,
+			QWidget* parent = 0,
+			Qt::WindowFlags f = 0,
+			osgViewer::ViewerBase::ThreadingModel threadingModel = osgViewer::CompositeViewer::SingleThreaded);
+
+		static ViewerWidget* getInstance() { return ms_instance; }
+
+		//TODO: I shouldn't do this but I will for now because im lazy
+		//TODO: Create general view class that interfaces with osg drawables
+		UVMapView& getUVMapView();
+
+
+		~ViewerWidget();
+
+		bool	loadMesh(const QString &fileName);
+		bool	saveMesh();
+		bool	saveMesh(const QString &filename);
+		void	setWireframeDisplay(bool isChecked);
+		void	toggleTextureDisplay();
+		void	toggleStatsDisplay();
+		void	resetTransform();
+		bool	popupUVEditor(QDockWidget* uvWindow);
+		void	uvEditorDestroyed();
+		void	updateUnwrapToolBar(QToolBar* toolBar);
+		void	popupSceneOutliner();
+
+		void	selectModeChanged(int idx);
+		void	selectUnwrapMethodChanged(int idx);
+
+		void	setGridlineMode(bool autoAdjust);
+
+		bool	isDebugMode() { return m_debugMode; }
+
+		void	setSelectMode(bool b);
+
+		void	highlightViewerSelection(std::set<int>& selectSet, bool fromGUI = true);
+
+		void	getSelectedFaces(FaceVisitorWorld visitor, std::set<int> selectionIndices, TriangleFaceIndex& selectedFaces, bool visibleFacesOnly = true);
+		void	getSelectedEdges(EdgeVisitorWorld visitor, std::set<int> selectionIndices, TriangleEdgeIndex& selectedEdges);
+		void	getSelectedVertices(VertexVisitorWorld visitor, std::set<int> selectionIndices, TriangleVertexIndex& selectedVertices);
+		void	getSelectedSubmeshes(GeometryVisitor visitor, std::set<int> selectionIndices,
+			TriangleSubmeshIndex& selectedSubmeshes);
+
+		void	drawSelectedFaces(const std::set<TriangleVerticesNormal>& faces, osg::Geode* geode, osg::Vec4 color = { 0.0f, 1.0f, 0.0f, 0.5f });
+		void	drawSelectedEdges(const std::set<Edge>& edges, osg::Geode* geode, float width = 3.0f, osg::Vec4 color = { 0.0f, 0.0, 1.0f, 1.0f });
+		void	drawSelectedVertices(const std::set<osg::Vec3>& vertices, osg::Geode* geode, osg::Vec4 color = { 1.0f, 0.0, 0.0f, 1.0f });
+		void	drawSelectedSubmeshes(const std::set<osg::Geometry*>& submesh, osg::Group* group, osg::Vec4 color = { 0.0f, 1.0, 0.0f, 1.0f });
+
+		void	selectOutlinerSubmeshes(QTreeWidgetItem* item, const std::set<osg::Geometry*>& submesh);
+
+		void	removeHighlight(osg::Group* scene);
+
+		const SelectedObjects& getSelectedObjects() { return m_selectedGeometries; }
+
+		BaseUnwrapHandler* getUnwrapHandler() const { return m_unwrapHandler; }
+
+		QWidget* getParent() const { return m_parent; }
+
+		osg::Node* getMeshViewerScene() { return m_viewMap[MESHVIEWER]->getSceneData(); }
+
+		GraphData* getActiveData() { return &m_activeData; }
+
+		void	displayTextureOnMesh();
+		void	displayTextureOnUV();
+
+		QWidget*	getUVWindow() const;
+		OutlinerDialog* getOutlinerWindow() const;
+
+		bool	getSaveRequired() const { return m_saveRequired; }
+		bool	getUnwrapComputeThreadRunning() const { return m_unwrapComputeThread.isRunning(); }
+
+		int		getPackingMethod() { return m_uvTools.packingMethod->currentIndex(); }
+		float	getPackingSpacing();
+		
+
+	private:
+		QWidget* addViewWidget(GraphicsView* gv, osg::ref_ptr<osg::Node> scene);
+
+		QWidget* addUVMapWidget(GraphicsView* gv, osg::ref_ptr<osg::Node> scene);
+
+		GraphicsView* createGraphicsWindow(int x, int y, int w, int h, const std::string& name = "", bool windowDecoration = false);
+
+		osg::Camera*	createAxisHUD(osg::Camera* viewCamera);
+
+		virtual void paintEvent(QPaintEvent* /*event*/) { frame(); }
+
+		void	parseArguments(osg::ArgumentParser& arguments);
+
+		void	selectionPressed(int button, int x, int y);
+
+		void	selectionReleased(int button, int x, int y);
+
+		void	selectionDragged(int button, int x, int y);
+
+		void	keyPressed(int key);
+
+		void	keyReleased(int key);
+
+		void	uvEditPressed(int x, int y);
+
+		void	uvEditDragged(float x, float y);
+
+		void	uvEditReleased(int x, int y);
+
+		void	addWireframe(osg::Group* parent);
+
+		void	addGridline(osg::Group* parent, float scale);
+
+		void setKeyModifierMode();
+
+		void	InitUVTools(QVBoxLayout* grid);
+
+		void setMainWindowTitle(bool isFileChanged);
+
+	public:
+
+		std::string getModelNamePath() const { return m_fileName; }
+
+		std::string getModelName() const;
+
+		void uvUnwrapDone(BaseUnwrapHandler* unwrapHandler);
+
+	private:
+		void unwrapUV();
+
+		void createProgressBar();
+
+		void drawAreaDistortion();
+
+		void drawAngleDistortion();
+
+		bool eventFilter(QObject* o, QEvent* e) override;
+
+		QWidget* m_parent;
+
+		BaseUnwrapHandler* m_unwrapHandler;
+
+		// the class instance static pointer
+		static ViewerWidget* ms_instance;
+
+	protected:
+		QtUnwrapContainer m_unwrapper;
+		bool m_unwrappingUV = false;
+		QtDialogSignalHandler& m_QtDialogSignalHandler;
+		QFuture<void> m_unwrapComputeThread;
+
+	signals:
+		void	emitSelectMode(bool b);
+		void	toggleStats(osgViewer::CompositeViewer* viewer);
+
+		void	messageBoxResponse(int button);
+		void	messageBoxResponseNotify();
+
+		void	emitLockUVDropDown(bool lock);
+		void	emitToggleResourceLocks(bool lock);
+
+		//void	onloadTexture();
+		//void	onclearTexture();
+		//void	onresetUVTransform();
+		void	onunwrapUV(bool unwrap);
+		void	resetprogressbar(bool reset);
+
+	public slots:
+		void	loadTexture();
+		void	clearTexture();
+		void	resetUVTransform();
+		void	updateEmptySpace(double emptySpace);
+
+		void	onFinishUnwrapUV();
+		void	onMessageBoxSignal(const QString & msg,
+					QFlags<QMessageBox::StandardButton>* buttons,
+					QMessageBox::Icon* icon);
+		void	editBoundary(bool toggled);
+		void	onSceneOutlinerClick(QTreeWidgetItem *item, int column);
+		void	onCloseEventCleanUpThreads();
+		void	onSelectHardEdges(std::set<int>& selectSet, bool fromGUI);
+
+	protected:
+		using ContextPtr = QtContextHolder::ContextPtr;
+
+		void tryConnectQtContext(const std::vector<ContextPtr>& contextList);
+		void tryDisconnectQtContext(const std::vector<ContextPtr>& contextList);
+
+		friend class ViewerWidgetInputContext;
+	};
+
+}
+
+#endif // VIEWER_WIDGET_HEADER
+
+___________________________________________________________________________________________________
+/***************************************************************************************
+ *
+ * Copyright (C) 2018-2019 VIRTUOS HOLDING PTE. LTD.
+ *
+ * This file is part of UV MAPPING TOOL.
+ *
+ * UV MAPPING TOOL can not be copied and/or distributed without the express
+ * permission of VIRTUOS HOLDING PTE. LTD.
+ *
+ ***************************************************************************************/
+
+#include <iostream>
+#include <map>
+
+#include <osgFX/Scribe>
+#include <osg\PolygonOffset>
+#include <osg\MatrixTransform>
+#include <osg\ComputeBoundsVisitor>
+#include <osgViewer\Viewer>
+#include <osgDB\WriteFile>
+#include <osgUtil\LineSegmentIntersector>
+
+#include <QtWidgets\QFileDialog>
+#include <QtWidgets\QLabel>
+
+#include "QString"
+#include "Edge.h"
+#include "BaseTypes.h"
+#include "GetVec2FromArrayVisitor.h"
+#include "ViewerStatsHandler.h"
+#include "colorrender.h"
+#include "ViewerWidget.h"
+#include "viewermanipulator.h"
+#include "UVManipulator.h"
+#include "Prototype1.h"
+
+#include "MeshView.h"
+#include "EdgeCloneVisitor.h"
+#include "EdgeVisitorWorld.h"
+#include "FaceVisitorWorld.h"
+#include "NamedNodeVisitor.h"
+#include "VertexVisitorWorld.h"
+#include "AxisCameraUpdateCallback.h"
+#include "BaseUnwrapHandler.h"
+#include "LSCMUnwrapHandler.h"
+#include "TriangleUnwrapHandler.h"
+#include "OptCutsUnwrapHandler.h"
+#include "UVNormalizeUnwrapHandler.h"
+#include "OptCutsBFFUnwrapHandler.h"
+#include "FBXSave.h"
+#include "Bff.h"
+#include "BFFUnwrapHandler.h"
+#include "GeometryVisitor.h"
+#include "PopulateGraphVisitor.h"
+#include "SeamEditorWidget.h"
+#include "ViewerWidgetInputContext.h"
+
+#include <QtWidgets/QMessageBox>
+#include <QtGui/QKeyEvent>
+#include <QFutureSynchronizer>
+
+#include "IndexingVisitor.h"
+#include <ctime>
+#include "UVNormalizeInputContext.h"
+#include <QtWidgets/qapplication.h>
+
+//#include <future>
+
+using namespace osg;
+using namespace osgQt;
+using namespace std;
+
+namespace VirtuosRnD
+{
+
+ViewerWidget* ViewerWidget::ms_instance = NULL;
+
+ViewerWidget* ViewerWidget::create(	osg::ArgumentParser& arguments,
+									QWidget* parent,
+									Qt::WindowFlags f,
+									osgViewer::ViewerBase::ThreadingModel threadingModel)
+{
+	ms_instance = new ViewerWidget(arguments, parent, Qt::Widget, threadingModel);
+	parent->setWindowTitle(ms_instance->m_windowTitle);
+
+	connect(ms_instance, SIGNAL(emitLockUVDropDown(bool)), parent, SLOT(lockUnwrapDropDown(bool)));
+	connect(ms_instance, SIGNAL(emitToggleResourceLocks(bool)), parent, SLOT(toggleResourceLocks(bool)));
+
+	connect(QApplication::instance(), SIGNAL(aboutToQuit()), ms_instance, SLOT(onCloseEventCleanUpThreads()));
+
+	if (ms_instance == nullptr)
+		throw std::exception("Cannot create instance of viewerwidget");
+
+	return ms_instance;
+}
+
+ViewerWidget::ViewerWidget(	ArgumentParser& arguments, QWidget* parent, Qt::WindowFlags f, osgViewer::ViewerBase::ThreadingModel threadingModel) :	
+							QWidget(parent, f),
+							m_wireframe(false),
+							m_textureMode(true),
+							m_selectMode(RECT_SELECT_VERTEX),
+							m_debugMode(false),
+							m_autoGridline(true),
+							m_uvEditor(NULL),
+							m_uvWindow(NULL),
+							m_texture(NULL),
+							m_QtDialogSignalHandler(QtDialogSignalHandler::getInstance()),
+							m_editBoundaryButton(NULL),
+							m_uvManipulator(NULL),
+							m_unwrapHandler(NULL)
+{
+	m_parent = parent;
+
+	setThreadingModel(threadingModel);
+
+	parseArguments(arguments);
+
+	// disable the default setting of viewer.done() by pressing Escape.
+	setKeyEventSetsDone(0);
+
+	m_outLiner = new OutlinerDialog();
+	connect(m_outLiner, &QTreeWidget::itemClicked, this, &ViewerWidget::onSceneOutlinerClick);
+	m_outLiner->installEventFilter(this);
+
+	GraphicsView* gv = createGraphicsWindow(0, 0, 100, 100);
+	QWidget* widget1 = addViewWidget(gv, NULL);
+	ref_ptr<Node> loadedFile;
+	
+	if (m_fileName == "")
+	{
+		loadedFile = NULL;
+	}
+	else
+	{
+		QString fileName = QString::fromLocal8Bit(m_fileName.c_str());
+		if (!loadMesh(fileName))
+		{
+			QMessageBox msgBox;
+			msgBox.setIcon(QMessageBox::Icon::Information);
+			QString msg = tr("Failed to load model, file not found: ");
+			msgBox.setText(msg + fileName);
+			msgBox.exec();
+		}
+	}
+
+	QGridLayout* grid = new QGridLayout;
+	grid->addWidget( widget1, 0, 0 );
+
+	setLayout(grid);
+
+	connect(&_timer, SIGNAL(timeout()), this, SLOT(update()));
+	_timer.start(10);
+
+	m_unwrapHandler = new LSCMUnwrapHandler();
+
+}
+
+UVMapView & ViewerWidget::getUVMapView()
+{
+	return *dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+}
+
+ViewerWidget::~ViewerWidget()
+{
+	if(m_uvWindow!=NULL)
+	{
+		uvEditorDestroyed();
+	}
+	delete m_unwrapHandler;
+	delete m_outLiner;
+}
+
+float ViewerWidget::getPackingSpacing()
+{ 
+	return m_uvTools.islandSpacing->text().toFloat(); 
+}
+
+QWidget* ViewerWidget::addViewWidget(GraphicsView* gv, ref_ptr<Node> scene)
+{
+	ref_ptr<MeshView> view = new MeshView;
+	if (m_viewMap.find(MESHVIEWER) == m_viewMap.end())
+	{
+		m_viewMap.insert(make_pair(MESHVIEWER, view));
+		addView(view);
+	}
+	else
+	{
+		std::cout << "Error! Mesh Viewer Already Exist!" << std::endl;
+		return NULL;
+	}
+
+	connect(view.get(), &MeshView::highlightSelection, this, &ViewerWidget::highlightViewerSelection);
+
+	Camera* camera = view->getCamera();
+	camera->setGraphicsContext(gv);
+
+	auto cullingMode = camera->getCullingMode();
+	camera->setCullingMode(cullingMode & (~osg::CullSettings::SMALL_FEATURE_CULLING));
+
+	const GraphicsContext::Traits* traits = gv->getTraits();
+
+	camera->setClearColor(Vec4(0.2, 0.5, 0.6, 1.0));
+	ref_ptr<Viewport> vp = new Viewport(0, 0, traits->width, traits->height);
+	camera->setViewport(vp);
+
+	// set the draw and read buffers up for a double buffered window with rendering going to back buffer
+	camera->setDrawBuffer(GL_BACK);
+	camera->setReadBuffer(GL_BACK);
+
+	camera->setProjectionMatrixAsPerspective(30.0f, static_cast<double>(traits->width) / static_cast<double>(traits->height), 1.0f, 10000.0f);
+	
+	//camera->setComputeNearFarMode(CullSettings::DO_NOT_COMPUTE_NEAR_FAR);
+
+	//view->setSceneData(scene);
+	m_viewerStatsHandler = new ViewerStatsHandler;
+	view->addEventHandler(m_viewerStatsHandler);
+	connect(this, &ViewerWidget::toggleStats, m_viewerStatsHandler, &ViewerStatsHandler::toggleStatsDisplay);
+
+	
+	m_viewerManipulator = view->addManipulator(&m_keyStack);
+	addContext<ViewerWidgetInputContext>(*this);
+	const auto& viewerInput = getContext<ViewerWidgetInputContext>();
+	viewerInput->tryConnect(m_viewerManipulator);
+
+	ref_ptr<Group> group = new Group;
+	//ref_ptr<Group> group = dynamic_cast<Group*>(scene.get());
+
+	if (scene)
+	{
+		scene->setName("Mesh");
+
+
+		ref_ptr<Group> modelGroup = dynamic_cast<Group*>(scene.get());
+
+		if (modelGroup->getNumChildren() > 1)
+		{
+			for (int i = 0; i < (int)modelGroup->getNumChildren(); i++)
+			{
+				if (modelGroup->getChild(i)->getName() == "Lamp")
+				{
+					modelGroup->removeChild(i);
+					i--;
+				}
+			}
+		}
+
+		group->addChild(scene.get());
+
+		if (m_autoGridline)
+		{
+			ComputeBoundsVisitor cbv;
+			scene->accept(cbv);
+			osg::BoundingBox bb = cbv.getBoundingBox();
+			float r = bb.radius();
+
+			addGridline(group, r / 10.0f);
+		}
+		else
+		{
+			addGridline(group, 1.0f);
+		}
+
+		Camera* axisCamera = createAxisHUD(camera);
+		view->addSlave(axisCamera, false);
+		group->addChild(axisCamera);
+
+		view->setSceneData(group.get());
+		setWireframeDisplay(m_wireframe);
+
+	}
+	else
+	{
+		view->setSceneData(group.get());
+
+	}
+
+	//m_wireframe = true;
+	//addWireframe(root, scene.get());
+
+
+
+	gv->setTouchEventsEnabled(true);
+	return gv->getGLWidget();
+}
+
+QWidget* ViewerWidget::addUVMapWidget(GraphicsView* gv, ref_ptr<Node> scene)
+{
+	ref_ptr<UVMapView> view = new UVMapView(scene/*, this->getUnwrapHandler()*/);
+
+	if (m_viewMap.find(UVEDITOR) == m_viewMap.end())
+	{
+		m_viewMap.insert(make_pair(UVEDITOR, view));
+		addView(view);
+	}
+	else
+	{
+		std::cout << "Error! UV Editor Already Exist!" << std::endl;
+		return NULL;
+	}
+
+	Camera* camera = view->getCamera();
+	camera->setGraphicsContext(gv);
+
+	auto cullingMode = camera->getCullingMode();
+	camera->setCullingMode(cullingMode & (~osg::CullSettings::SMALL_FEATURE_CULLING));
+
+	const GraphicsContext::Traits* traits = gv->getTraits();
+
+	camera->setClearColor(Vec4(0.2, 0.5, 0.6, 1.0));
+	ref_ptr<Viewport> vp = new Viewport(0, 0, traits->width, traits->height);
+	camera->setViewport(vp);
+
+	// set the draw and read buffers up for a double buffered window with rendering going to back buffer
+	camera->setDrawBuffer(GL_BACK);
+	camera->setReadBuffer(GL_BACK);
+
+	camera->setProjectionMatrixAsPerspective(30.0f, static_cast<double>(traits->width) / static_cast<double>(traits->height), 1.0f, 10000.0f);
+
+	//camera->setComputeNearFarMode(CullSettings::DO_NOT_COMPUTE_NEAR_FAR);
+
+	//view->setSceneData(scene);
+	ref_ptr<osgViewer::StatsHandler> sh = new osgViewer::StatsHandler;
+	view->addEventHandler(sh);
+	m_uvManipulator = view->addManipulator(&m_keyStack);
+	//const auto& viewerInput = getContext<ViewerWidgetInputContext>();
+	//viewerInput->tryConnect(m_uvManipulator);
+
+	//connect(m_uvManipulator, &UVManipulator::keyPressed, this, &ViewerWidget::keyPressed);
+	//connect(m_uvManipulator, &UVManipulator::keyReleased, this, &ViewerWidget::keyReleased);
+
+	//connect(m_uvManipulator, &UVManipulator::mousePressed, this, &ViewerWidget::uvEditPressed);
+	//connect(m_uvManipulator, &UVManipulator::mouseDragged, this, &ViewerWidget::uvEditDragged);
+	//connect(m_uvManipulator, &UVManipulator::mouseReleased, this, &ViewerWidget::uvEditReleased);
+
+	view->setSceneData(view->getRootGroup());
+
+	gv->setTouchEventsEnabled(true);
+	return gv->getGLWidget();
+}
+
+GraphicsView* ViewerWidget::createGraphicsWindow(int x, int y, int w, int h, const std::string& name, bool windowDecoration)
+{
+	DisplaySettings* ds = DisplaySettings::instance().get();
+	ref_ptr<GraphicsContext::Traits> traits = new GraphicsContext::Traits;
+	traits->windowName = name;
+	traits->windowDecoration = windowDecoration;
+	traits->x = x;
+	traits->y = y;
+	traits->width = w;
+	traits->height = h;
+	traits->doubleBuffer = true;
+	traits->alpha = ds->getMinimumNumAlphaBits();
+	traits->stencil = ds->getMinimumNumStencilBits();
+	traits->sampleBuffers = ds->getMultiSamples();
+	traits->samples = ds->getNumMultiSamples();
+
+	return new GraphicsView(traits.get());
+}
+
+Camera*	ViewerWidget::createAxisHUD(Camera* viewCamera)
+{
+	// create slave camera for axis
+	osg::Camera* camera = new osg::Camera;
+	camera->setReferenceFrame(osg::Transform::ABSOLUTE_RF);
+	camera->setClearMask(GL_DEPTH_BUFFER_BIT);
+	camera->setRenderOrder(osg::Camera::POST_RENDER);
+	camera->setUpdateCallback(new AxisCameraUpdateCallback(viewCamera));
+
+	// create axis model
+	ref_ptr<Vec3Array> vertices = new osg::Vec3Array;
+
+	vertices->push_back(Vec3(1.0f, 0.0f, 0.0f));
+	vertices->push_back(Vec3(0.0f, 0.0f, 0.0f));
+	vertices->push_back(Vec3(0.0f, 1.0f, 0.0f));
+	vertices->push_back(Vec3(0.0f, 0.0f, 0.0f));
+	vertices->push_back(Vec3(0.0f, 0.0f, 1.0f));
+	vertices->push_back(Vec3(0.0f, 0.0f, 0.0f));
+
+	ref_ptr<Vec4ubArray> colors = new Vec4ubArray;
+	colors->push_back(Vec4ub(255, 0, 0, 255));
+	colors->push_back(Vec4ub(0, 255, 0, 255));
+	colors->push_back(Vec4ub(0, 0, 255, 255));
+
+	ref_ptr<Geometry> axes = new Geometry;
+
+	axes->setVertexArray(vertices.get());
+	axes->setColorArray(colors.get());
+	axes->setColorBinding(Geometry::BIND_PER_PRIMITIVE_SET);
+	axes->addPrimitiveSet(new DrawArrays(GL_LINES, 0, 2));
+	axes->addPrimitiveSet(new DrawArrays(GL_LINES, 2, 2));
+	axes->addPrimitiveSet(new DrawArrays(GL_LINES, 4, 2));
+
+	axes->getOrCreateStateSet()->setMode(GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE);
+
+	ref_ptr<Geode> geode = new Geode;
+	geode->addDrawable(axes);
+		
+
+	//create x letter model
+	ref_ptr<Vec3Array> verticesX = new osg::Vec3Array;
+	ref_ptr<Geometry> x = new Geometry;
+	verticesX->push_back(Vec3(-0.15f, 0.0f, 0.2f));
+	verticesX->push_back(Vec3(0.2f, 0.0f, -0.2f));
+	verticesX->push_back(Vec3(0.15f, 0.0f, 0.2f));
+	verticesX->push_back(Vec3(-0.2f, 0.0f, -0.2f));
+	ref_ptr<Vec4ubArray> colorsX = new Vec4ubArray;
+	colorsX->push_back(Vec4ub(255, 0, 0, 255));
+	x->setVertexArray(verticesX.get());
+	x->setColorArray(colorsX.get());
+	x->setColorBinding(Geometry::BIND_PER_PRIMITIVE_SET);
+	x->addPrimitiveSet(new DrawArrays(GL_LINES, 0, 4));
+	x->getOrCreateStateSet()->setMode(GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE);
+
+	ref_ptr<Billboard> billboardX = new Billboard;
+	billboardX->addDrawable(x);
+	billboardX->setMode(Billboard::POINT_ROT_EYE);
+	ref_ptr<MatrixTransform> mtX = new MatrixTransform;
+	mtX->setMatrix(Matrixd::translate(1.5f, 0.0f, 0.0f));	
+	mtX->addChild(billboardX);
+
+	//create y letter model
+	ref_ptr<Vec3Array> verticesY = new osg::Vec3Array;
+	ref_ptr<Geometry> y = new Geometry;
+	verticesY->push_back(Vec3(-0.15f, 0.0f, 0.2f));
+	verticesY->push_back(Vec3(0.0f, 0.0f, 0.03f));
+	verticesY->push_back(Vec3(0.15f, 0.0f, 0.2f));
+	verticesY->push_back(Vec3(0.0f, 0.0f, 0.03f));
+	verticesY->push_back(Vec3(0.0f, 0.0f, -0.2f));
+	verticesY->push_back(Vec3(0.0f, 0.0f, 0.03f));
+	ref_ptr<Vec4ubArray> colorsY = new Vec4ubArray;
+	colorsY->push_back(Vec4ub(0, 255, 0, 255));
+	y->setVertexArray(verticesY.get());
+	y->setColorArray(colorsY.get());
+	y->setColorBinding(Geometry::BIND_PER_PRIMITIVE_SET);
+	y->addPrimitiveSet(new DrawArrays(GL_LINES, 0, 6));
+	y->getOrCreateStateSet()->setMode(GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE);
+
+	ref_ptr<Billboard> billboardY = new Billboard;
+	billboardY->addDrawable(y);
+	billboardY->setMode(Billboard::POINT_ROT_EYE);
+	ref_ptr<MatrixTransform> mtY = new MatrixTransform;
+	mtY->setMatrix(Matrixd::translate(0.0f, 1.5f, 0.0f));
+	mtY->addChild(billboardY);
+
+	//create z letter model
+	ref_ptr<Vec3Array> verticesZ = new osg::Vec3Array;
+	ref_ptr<Geometry> z = new Geometry;
+	verticesZ->push_back(Vec3(-0.15f, 0.0f, 0.2f));
+	verticesZ->push_back(Vec3(0.15f, 0.0f, 0.2f));
+	verticesZ->push_back(Vec3(0.15f, 0.0f, 0.2f));
+	verticesZ->push_back(Vec3(-0.2f, 0.0f, -0.2f));
+	verticesZ->push_back(Vec3(-0.2f, 0.0f, -0.2f));
+	verticesZ->push_back(Vec3(0.2f, 0.0f, -0.2f));
+	ref_ptr<Vec4ubArray> colorsZ = new Vec4ubArray;
+	colorsZ->push_back(Vec4ub(0, 0, 255, 255));
+	z->setVertexArray(verticesZ.get());
+	z->setColorArray(colorsZ.get());
+	z->setColorBinding(Geometry::BIND_PER_PRIMITIVE_SET);
+	z->addPrimitiveSet(new DrawArrays(GL_LINES, 0, 6));
+	z->getOrCreateStateSet()->setMode(GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE);
+
+	ref_ptr<Billboard> billboardZ = new Billboard;
+	billboardZ->addDrawable(z);
+	billboardZ->setMode(Billboard::POINT_ROT_EYE);
+	ref_ptr<MatrixTransform> mtZ = new MatrixTransform;
+	mtZ->setMatrix(Matrixd::translate(0.0f, 0.0f, 1.5f));
+	mtZ->addChild(billboardZ);
+
+	camera->addChild(geode);
+	camera->addChild(mtX);
+	camera->addChild(mtZ);
+	camera->addChild(mtY);
+
+	return camera;
+}
+
+void ViewerWidget::parseArguments(ArgumentParser& arguments)
+{
+	if (arguments.read("--debug"))
+	{
+		m_debugMode = true;
+	}
+
+	arguments.read("--model", m_fileName);
+	return;
+}
+
+bool ViewerWidget::eventFilter(QObject* o, QEvent* e)
+{
+	//// To handle key commands intended for main dialog when under outliner window
+	//if (o == m_outLiner && e->type() == QEvent::KeyPress)
+	//{
+	//	QKeyEvent* key = (QKeyEvent*)e;
+	//	
+	//	// ALT is 65513, CTRL is 65507, SHIFT is 65505
+	//	if(key->key() == Qt::Key_Alt)
+	//		emit keyPressed(65513);
+	//	else if (key->key() == Qt::Key_Control)
+	//		emit keyPressed(65507);
+	//	else if (key->key() == Qt::Key_Shift)
+	//		emit fed(65505);
+	//}
+
+	return false;
+}
+
+bool ViewerWidget::loadMesh(const QString &fileName)
+{
+	if (m_saveRequired)
+	{
+		QMessageBox message;
+		message.setIcon(QMessageBox::Icon::Warning);
+		message.setStandardButtons(QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+		message.setDefaultButton(QMessageBox::Cancel);
+		message.setText(tr("Warning: Your current model has been modified."));
+		message.setInformativeText(tr("Do you wish to save your changes?"));
+		
+		int result = message.exec();
+
+		if (result == QMessageBox::Save)
+			this->saveMesh();
+		else if (result == QMessageBox::Cancel)
+			return false;
+	}
+
+	resetTransform();
+	if (m_unwrapHandler != NULL)
+	{
+		m_unwrapHandler->resetHandler();
+	}
+
+	ref_ptr<Node> root = m_viewMap[MESHVIEWER]->getSceneData();
+	ref_ptr<Group> group = dynamic_cast<Group*>(root.get());
+	unsigned int numChildren = group->getNumChildren();
+
+
+	// Remove all previous highlight and selection
+	removeHighlight(group);
+	this->m_selectedGeometries.clearObjects();
+	
+	if (numChildren > 0)
+	{
+		//Delete previous model
+
+		NamedNodeVisitor nnv1("Mesh");
+		group->accept(nnv1);
+
+		if (nnv1.getNodes().size() != 0)
+		{
+			for (int i = 0; i < nnv1.getNodes().size(); ++i)
+			{
+				auto parent = nnv1.getNodes()[i]->getParent(0);
+				parent->removeChild(nnv1.getNodes()[i]);
+			}
+		}		   
+
+		NamedNodeVisitor nnv2("WireFrame");
+		group->accept(nnv2);
+
+		if (nnv2.getNodes().size() != 0)
+		{
+			for (int i = 0; i < nnv2.getNodes().size(); ++i)
+			{
+				auto parent = nnv2.getNodes()[i]->getParent(0);
+				parent->removeChild(nnv2.getNodes()[i]);
+			}
+		}
+
+		NamedNodeVisitor nnv3("Gridline");
+		group->accept(nnv3);
+
+		if (nnv3.getNodes().size() != 0)
+		{
+			for (int i = 0; i < nnv3.getNodes().size(); ++i)
+			{
+				auto parent = nnv3.getNodes()[i]->getParent(0);
+				parent->removeChild(nnv3.getNodes()[i]);
+			}
+		}
+		
+	}
+	else
+	{
+		//Previous model doesn't exist. Create axis display for first model
+		Camera* axisCamera = createAxisHUD(m_viewMap[MESHVIEWER]->getCamera());
+		m_viewMap[MESHVIEWER]->addSlave(axisCamera, false);
+		group->addChild(axisCamera);
+	}
+
+	// Load mesh file
+	std::string ss = fileName.toLocal8Bit().constData();
+	m_fileName = ss;
+	ref_ptr<Node> model = osgDB::readRefNodeFile(ss);
+
+	if (model == NULL)
+	{
+		return false;
+	}
+	else
+	{
+		osg::StateSet* stateset = model->getOrCreateStateSet();
+		osg::ref_ptr<osg::PolygonOffset> polyoffset = new osg::PolygonOffset;
+		polyoffset->setFactor(2.f);
+		polyoffset->setUnits(1.f);
+		stateset->setAttributeAndModes(polyoffset, osg::StateAttribute::OVERRIDE | osg::StateAttribute::ON);
+
+		model->setName("Mesh");
+		ref_ptr<Group> modelGroup = dynamic_cast<Group*>(model.get());
+
+		//Remove lamp object created by Blender
+		if (modelGroup->getNumChildren() > 1)
+		{
+			for (int i = 0; i < (int)modelGroup->getNumChildren(); i++)
+			{
+				if (modelGroup->getChild(i)->getName() == "Lamp")
+				{
+					modelGroup->removeChild(i);
+					i--;
+				}
+			}
+		}
+
+		group->insertChild(0, model);
+
+
+		// Add Gridline
+		ComputeBoundsVisitor cbv;
+		model->accept(cbv);
+		osg::BoundingBox bb = cbv.getBoundingBox();
+		float r = bb.radius();
+		if (m_autoGridline)
+		{
+			addGridline(group, r / 10.0f);
+		}
+		else
+		{
+			addGridline(group, 1.0f);
+		}
+			   
+		// handle pre-existing texture
+		GeometryVisitor geoVisitor;
+		model->accept(geoVisitor);
+		auto geoVec = geoVisitor.getGeometryVec();
+		if(geoVec.size()>0)
+		{
+			m_texture = dynamic_cast<osg::Texture2D*>(geoVec[0]->getOrCreateStateSet()->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+		}
+		displayTextureOnMesh();
+
+
+		// Update UV Editor
+		if (m_uvEditor != NULL)
+		{
+			UVMapView * uv = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+
+			uv->removeDistortion();
+			uv->updateHandler(model);
+			uv->updateModel();
+			uv->setSceneData(uv->getRootGroup());
+
+			uv->calculateEmptySpace();
+
+			MeshView * mv = dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER]);
+			mv->removeDistortion();
+			
+			m_uvTools.areaDistortion->setChecked(false);
+			m_uvTools.angleDistortion->setChecked(false);
+
+			displayTextureOnUV();
+
+			if (m_editBoundaryButton != NULL && m_editBoundaryButton->isChecked())
+			{
+				m_editBoundaryButton->setChecked(false);
+				uv->clearKnots();
+			}
+		}		
+
+		setWireframeDisplay(m_wireframe);
+
+		dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER])->setHomePosition(r);
+
+		this->setMainWindowTitle(false);
+
+		if (m_outLiner->isVisible())
+		{
+			m_outLiner->run(model);
+		}
+		
+		return true;
+	}
+	
+}
+
+bool ViewerWidget::saveMesh()
+{
+	QString selfilter = tr("FBX(*.fbx)");
+	QString fileName = QFileDialog::getSaveFileName(
+		this,
+		"Save File",
+		tr("../Data/"),
+		selfilter
+	);
+	if (fileName != NULL)
+	{
+		return this->saveMesh(fileName);
+	}
+
+	return false;
+}
+
+bool ViewerWidget::saveMesh(const QString &fileName)
+{
+	auto name = fileName.toStdString();
+	m_fileName = name;
+
+	ref_ptr<Node> root = m_viewMap[MESHVIEWER]->getSceneData();
+	ref_ptr<Group> group = dynamic_cast<Group*>(root.get());
+
+	NamedNodeVisitor nnv("Mesh");
+	group->accept(nnv);
+
+	ref_ptr<Node> model;
+	if (nnv.getNodes().size() > 0)
+	{
+		model = nnv.getNodes()[0];
+
+		ref_ptr<const osgDB::Options> options = new osgDB::Options;
+		bool result = FBXSave::writeNode(*model, name, options);
+
+		QMessageBox msgBox;
+		msgBox.setIcon(QMessageBox::Icon::Information);
+		msgBox.setText(tr("Model is saved."));
+		msgBox.exec();
+
+		this->setMainWindowTitle(false);
+		return true;
+	}
+	else
+	{
+		QMessageBox msgBox;
+		msgBox.setIcon(QMessageBox::Icon::Information);
+		msgBox.setText(tr("Failed to save model: Empty scene."));
+		msgBox.exec();
+		return false;
+	}
+
+}
+
+void ViewerWidget::setWireframeDisplay(bool isChecked)
+{
+	m_wireframe = isChecked;
+	map<int, osgViewer::View*>::iterator it;
+	for (it = m_viewMap.begin(); it != m_viewMap.end(); it++)
+	{
+		ref_ptr<Group> group = dynamic_cast<Group*>(it->second->getSceneData());
+		
+		if (group->getNumChildren() == 0)
+		{
+			return;
+		}
+
+		NamedNodeVisitor nnv0("WireFrame");
+		group->accept(nnv0);
+
+		if (nnv0.getNodes().size() == 0)
+		{
+			addWireframe(group);
+		}
+
+
+		NamedNodeVisitor nnv("WireFrame");
+		group->accept(nnv);
+
+		if (m_wireframe)
+		{
+			for (int i = 0; i < nnv.getNodes().size(); i++)
+			{
+				nnv.getNodes()[i]->setNodeMask(1);
+			}
+		}
+		else
+		{
+			for (int i = 0; i < nnv.getNodes().size(); i++)
+			{
+				nnv.getNodes()[i]->setNodeMask(0);
+			}
+		}
+		//if (m_wireframe)
+		//{
+		//	group->getChild(1)->setNodeMask(1);
+		//}
+		//else
+		//{
+		//	group->getChild(1)->setNodeMask(0);
+		//}
+
+	}
+}
+
+void ViewerWidget::toggleTextureDisplay()
+{
+	m_textureMode = !m_textureMode;
+	displayTextureOnMesh();
+}
+
+void ViewerWidget::toggleStatsDisplay()
+{
+	emit toggleStats(this);
+}
+
+void ViewerWidget::resetTransform()
+{ 
+	dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER])->home();
+}
+
+void ViewerWidget::loadTexture()
+{
+
+	QString selfilter = tr("Image(*.bmp;*.png;*.jpg);;BMP(*.bmp)");
+	QString QFileName = QFileDialog::getOpenFileName(
+		this,
+		"Open File",
+		tr("Resources/"),
+		selfilter
+	);
+	std::string fileName = QFileName.toLocal8Bit().constData();
+
+
+	if (m_texture == NULL)
+	{
+		m_texture = new osg::Texture2D;
+		m_texture->setDataVariance(osg::Object::DYNAMIC); // protect from being optimized away as static state.
+	}
+	m_texture->setImage(osgDB::readRefImageFile(fileName));
+
+	displayTextureOnMesh();
+	displayTextureOnUV();
+
+	this->setMainWindowTitle(true);
+
+	m_uvWindow->raise();
+	m_uvWindow->activateWindow();
+
+	//emit onloadTexture();
+
+}
+
+
+void ViewerWidget::clearTexture()
+{
+	m_texture = NULL;
+	displayTextureOnMesh();
+	displayTextureOnUV();
+	//emit onclearTexture();
+}
+
+void ViewerWidget::resetUVTransform()
+{
+	m_viewMap[UVEDITOR]->home();
+	//emit onresetUVTransform();
+}
+
+void ViewerWidget::updateEmptySpace(double emptySpace)
+{
+	QString valueAsString = QString::number(emptySpace);
+	m_uvTools.emptySpace->setText(valueAsString);
+}
+
+void ViewerWidget::onMessageBoxSignal(const QString & msg,
+	QFlags<QMessageBox::StandardButton>* buttons,
+	QMessageBox::Icon* icon)
+{
+	QMessageBox mb;
+	mb.setIcon(*icon);
+	mb.setText(msg);
+	mb.setStandardButtons(*buttons);
+	int response = mb.exec();
+
+	emit messageBoxResponse(response);
+	emit messageBoxResponseNotify();
+}
+
+void ViewerWidget::onSceneOutlinerClick(QTreeWidgetItem *item, int column)
+{
+	// There should only be 1 column
+	if (column != 0) return;
+
+	GraphData data = item->data(column, Qt::UserRole).value<GraphData>();
+	m_activeData = data;
+
+	IndexingVisitor visitor(m_selectMode);
+	m_viewMap[MESHVIEWER]->getSceneData()->asGroup()->getChild(0)->accept(visitor);
+	
+	//std::set<int> meshIndices = visitor.indexMap[data.getData()];
+	std::set<int> meshIndices = visitor.getIndexMap()[data.getData()];
+
+
+	MeshView* mv = dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER]);
+	emit mv->highlightSelection(meshIndices, false);
+
+	return;
+}
+
+void ViewerWidget::onCloseEventCleanUpThreads()
+{
+	//TODO: Send sigkill to compute?
+	if (m_unwrapComputeThread.isRunning())
+	{
+		// The destructor calls WaitForFinished()
+		QFutureSynchronizer<void> s;
+		s.addFuture(m_unwrapComputeThread); //Wait for compute thread to return
+	}
+}
+
+void ViewerWidget::tryConnectQtContext(const std::vector<ContextPtr>& contextList)
+{
+	for (const auto& context : contextList)
+	{
+		//if (context->tryConnect(m_viewerManipulator))
+		//{
+		//	//TODO: Raise warning/error compile time?
+		//	//TODO: Raise warning/error run time?
+		//}
+		if (context->tryConnect(m_uvManipulator))
+		{
+			std::cout << "Connected successfully.\n";
+		}
+		else
+		{
+			std::cout << "Could not connect to context!\n";
+		}
+	}
+}
+
+void ViewerWidget::tryDisconnectQtContext(const std::vector<ContextPtr>& contextList)
+{
+	for (const auto& context : contextList)
+	{
+		if (context->tryDisconnect(m_uvManipulator))
+		{
+
+		}
+	}
+}
+
+void ViewerWidget::popupSceneOutliner()
+{
+	ref_ptr<Node> sceneData = m_viewMap[MESHVIEWER]->getSceneData();
+
+	auto numChildren = sceneData->asGroup()->getNumChildren();
+	if (numChildren != 0)
+	{
+		ref_ptr<Node> inputScene = sceneData->asGroup()->getChild(0);
+		m_outLiner->run(inputScene);
+
+		/*connect(m_outLiner, &QTreeWidget::itemClicked, this, &ViewerWidget::onSceneOutlinerClick);*/
+	}
+	
+	return;
+}
+
+void ViewerWidget::editBoundary(bool toggled)
+{
+	BFFUnwrapHandler* handler = dynamic_cast<BFFUnwrapHandler*>(m_unwrapHandler);
+	UVMapView * view = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+	if (handler != NULL)
+	{
+
+		if (toggled)
+		{
+			if (!handler->isUnwrapped())
+			{
+				QMessageBox mb;
+				mb.setText("Please do BFF unwrap first!");
+				mb.setIcon(QMessageBox::Icon::Critical);
+				mb.exec();
+				m_editBoundaryButton->setChecked(false);
+				return;
+			}
+			handler->enableBoundaryEditing(toggled);
+			view->displayKnots();
+		}
+		else
+		{
+			handler->enableBoundaryEditing(toggled);
+			view->clearKnots();
+		}
+	}
+
+	if (m_uvManipulator != NULL)
+	{
+		m_uvManipulator->enableBoundaryEditing(toggled);
+	}
+
+}
+
+bool ViewerWidget::popupUVEditor(QDockWidget* uvWindow)
+{
+	Group *group = dynamic_cast<Group*>(m_viewMap[MESHVIEWER]->getSceneData());
+
+	NamedNodeVisitor nnv("Mesh");
+	group->accept(nnv);
+
+	if (nnv.getNodes().size() > 0)
+	{
+		if (m_uvEditor != NULL)
+		{
+			uvEditorDestroyed();
+		}
+			
+		m_uvEditor = addUVMapWidget(createGraphicsWindow(500, 150, 1024, 768, "UVMap", true), nnv.getNodes()[0]);
+		m_uvWindow = uvWindow;
+
+		//Init all the UI widgets for UV editor
+		QVBoxLayout* grid = new QVBoxLayout;
+		InitUVTools(grid);
+
+		grid->addWidget(m_uvEditor);
+
+		m_uvTools.container->setLayout(grid);
+
+		m_uvWindow->setWidget(m_uvTools.container);
+		m_uvWindow->setMinimumSize(600, 600);
+
+		UVMapView* view = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+
+		view->home();
+			
+		//display selection
+		if (m_selectedGeometries.getType() == SelectedObjects::PrimitiveType::Vertex)
+		{
+			auto selectedVertex = std::get<0>(this->m_selectedGeometries.getVertices());
+			dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->highlightSelection(selectedVertex, RECT_SELECT_VERTEX);
+		}
+		else if (m_selectedGeometries.getType() == SelectedObjects::PrimitiveType::Edge)
+		{
+			auto selectedEdges = std::get<0>(this->m_selectedGeometries.getEdges());
+			dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->highlightSelection(selectedEdges, RECT_SELECT_EDGE);
+		}
+		else
+		{
+			auto selectedFaces = std::get<0>(this->m_selectedGeometries.getFaces());
+			dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->highlightSelection(selectedFaces, RECT_SELECT_FACE);
+		}
+
+		displayTextureOnUV();
+
+		view->calculateEmptySpace();
+
+		if (QtContextHolder* contextEnabledWrapper = dynamic_cast<QtContextHolder*>(m_unwrapHandler))
+		{
+			tryConnectQtContext(contextEnabledWrapper->getContexts());
+		}
+
+		return true;
+	}
+	else
+	{
+		QMessageBox msgBox;
+		msgBox.setIcon(QMessageBox::Icon::Information);
+		msgBox.setText(tr("Please load a model first."));
+		msgBox.exec();
+		return false;
+	}
+
+}
+
+void ViewerWidget::InitUVTools(QVBoxLayout* grid)
+{
+	m_uvTools.load = new QPushButton(tr("Load Texture"));
+	m_uvTools.clear = new QPushButton(tr("Clear Texture"));
+	m_uvTools.reset = new QPushButton(tr("Reset"));
+	m_uvTools.unwrap = new QPushButton(tr("Unwrap"));
+	m_uvTools.emptySpaceLabel = new QLabel(tr(" Empty Space:"));
+	m_uvTools.emptySpace = new QLineEdit(tr("0"));
+	m_uvTools.areaDistortion = new QPushButton(tr("Draw Area Distortion"));
+	m_uvTools.angleDistortion = new QPushButton(tr("Draw Angle Distortion"));
+	m_uvTools.packingMethod = new QComboBox();
+	m_uvTools.packingMethodLabel = new QLabel(tr(" Packing Method:"));
+	m_uvTools.packingMethod->addItem(tr("Grid Align"));
+	m_uvTools.packingMethod->addItem(tr("Bin Packing"));
+	m_uvTools.packingMethod->setCurrentIndex(1);
+	m_uvTools.islandSpacingLabel = new QLabel(tr("Island Spacing:"));
+	m_uvTools.islandSpacing = new QLineEdit; 
+	m_uvTools.spacingValidator = new QDoubleValidator(0, 1, 4);
+	m_uvTools.spacingValidator->setNotation(QDoubleValidator::StandardNotation);
+	m_uvTools.islandSpacing->setValidator(m_uvTools.spacingValidator);
+	m_uvTools.islandSpacing->setText("0.001");
+	//m_uvTools.packingMethod->setMaximumWidth(100);
+	//m_uvTools.reset->setMaximumWidth(100);
+
+	//m_uvTools.emptySpaceLabel->setMaximumWidth(80);
+	//m_uvTools.emptySpace->setMaximumWidth(100);
+	m_uvTools.emptySpace->setReadOnly(true);
+
+	UVMapView* view = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+
+	connect(m_uvTools.unwrap, &QPushButton::pressed, this, &ViewerWidget::unwrapUV);
+	connect(m_uvTools.areaDistortion, &QPushButton::pressed, this, &ViewerWidget::drawAreaDistortion);
+	connect(m_uvTools.angleDistortion, &QPushButton::pressed, this, &ViewerWidget::drawAngleDistortion);
+	m_uvTools.areaDistortion->setCheckable(true);
+	m_uvTools.areaDistortion->setChecked(false);
+	m_uvTools.angleDistortion->setCheckable(true);
+	m_uvTools.angleDistortion->setChecked(false);
+
+
+	connect(m_uvTools.load, SIGNAL(released()), this, SLOT(loadTexture()));
+	connect(m_uvTools.clear, SIGNAL(released()), this, SLOT(clearTexture()));
+	connect(m_uvTools.reset, SIGNAL(released()), this, SLOT(resetUVTransform()));
+	connect(view, SIGNAL(triggerEmptySpace(double)), this, SLOT(updateEmptySpace(double)));
+
+	QHBoxLayout* HLayout0 = new QHBoxLayout;
+	HLayout0->addWidget(m_uvTools.load);
+	HLayout0->addWidget(m_uvTools.clear);
+	HLayout0->addWidget(m_uvTools.reset);
+	HLayout0->addWidget(m_uvTools.unwrap);
+	HLayout0->addWidget(m_uvTools.areaDistortion);
+	HLayout0->addWidget(m_uvTools.angleDistortion);
+
+	QHBoxLayout* HLayout1 = new QHBoxLayout;
+	m_uvTools.seamEditorWidget = new SeamEditorWidget{};
+	HLayout1->addWidget(m_uvTools.seamEditorWidget);
+
+	QHBoxLayout* HLayout2 = new QHBoxLayout;
+	HLayout2->addWidget(m_uvTools.packingMethodLabel);
+	HLayout2->addWidget(m_uvTools.packingMethod);
+	HLayout2->addWidget(m_uvTools.islandSpacingLabel);
+	HLayout2->addWidget(m_uvTools.islandSpacing);
+	HLayout2->addWidget(m_uvTools.emptySpaceLabel);
+	HLayout2->addWidget(m_uvTools.emptySpace);
+
+	grid->addLayout(HLayout0);
+	grid->addLayout(HLayout1);
+	grid->addLayout(HLayout2);
+
+	m_uvTools.container = new QWidget;
+
+	return;
+}
+
+void ViewerWidget::uvEditorDestroyed()
+{
+	MeshView* mv = dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER]);
+
+	removeView(m_viewMap[UVEDITOR]);
+	m_viewMap.erase(UVEDITOR);
+
+	delete m_uvTools.load;
+	delete m_uvTools.clear;
+	delete m_uvTools.reset;
+	delete m_uvTools.unwrap;
+	delete m_uvTools.emptySpaceLabel;
+	delete m_uvTools.emptySpace;
+	delete m_uvTools.areaDistortion;
+	delete m_uvTools.seamEditorWidget;
+
+
+	delete m_uvEditor;
+	delete m_uvTools.container;
+	m_uvEditor = NULL;
+
+	m_uvWindow = NULL;
+}
+
+void ViewerWidget::updateUnwrapToolBar(QToolBar* toolBar)
+{
+	BFFUnwrapHandler* bffHandler = dynamic_cast<BFFUnwrapHandler*>(m_unwrapHandler);
+	if (bffHandler == NULL)
+	{
+		toolBar->clear();
+		if (m_editBoundaryButton != NULL)
+		{
+			delete m_editBoundaryButton;
+			m_editBoundaryButton = NULL;
+			delete m_editBoundaryLabel;
+			UVMapView * uv = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+			uv->clearKnots();
+		}
+	}
+	else
+	{
+		m_editBoundaryButton = new QToolButton();
+		const QIcon icon(tr("Resources/edit.png"));
+		m_editBoundaryButton->setText("Edit Boundary");
+		m_editBoundaryButton->setIcon(icon);
+		m_editBoundaryButton->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+		toolBar->addWidget(m_editBoundaryButton);
+		m_editBoundaryButton->setCheckable(true);
+		m_editBoundaryButton->setChecked(false);
+		connect(m_editBoundaryButton, &QPushButton::toggled, this, &ViewerWidget::editBoundary);
+		m_editBoundaryLabel = new QLabel;
+		m_editBoundaryLabel->setText(tr("Select/Add a Handle: Click on the handle/boundary\n"
+			"Remove a Handle: Ctrl + click on the handle\n"
+			"Change Scaling: Drag the handle horizontally\n"
+			"Change Angle: Shift + drag the handle horizontally"
+		));
+		m_editBoundaryLabel->setMargin(2);
+		toolBar->addWidget(m_editBoundaryLabel);
+	}
+}
+
+void ViewerWidget::unwrapUV()
+{
+	if (m_unwrappingUV)
+	{
+		QMessageBox mb;
+		mb.setText("Unwrapping is still in progress!");
+		mb.setIcon(QMessageBox::Icon::Critical);
+		mb.exec();
+		return;
+	}
+
+	m_unwrappingUV = true;
+	emit emitLockUVDropDown(true);
+	emit emitToggleResourceLocks(true);
+	emit onunwrapUV(true);
+
+	auto scene = m_viewMap[MESHVIEWER]->getSceneData();
+
+	auto unwrapper = getUnwrapHandler();
+
+	m_unwrapper.setUnwrapper(unwrapper);
+	connect(&m_unwrapper, SIGNAL(onUnwrapFinished()), this, SLOT(onFinishUnwrapUV()));
+
+	if (m_editBoundaryButton != NULL)
+	{
+		m_editBoundaryButton->setEnabled(false);
+	}
+
+	auto nodes = make_shared<vector<Node*>>();
+	auto selectedSubmesh = get<1>(m_selectedGeometries.getSubmeshes());
+	if (selectedSubmesh.size() <= 0)
+	{
+		NamedNodeVisitor nnv("Mesh");
+		scene->accept(nnv);
+
+		if (nnv.getNodes().size() <= 0)
+		{
+			QMessageBox mb;
+			mb.setText("Error! Mesh model not found!");
+			mb.setIcon(QMessageBox::Icon::Critical);
+			mb.exec();
+			return;
+		}
+		osg::Node* node = nnv.getNodes()[0];
+
+		nodes->push_back(node);
+	}
+	else
+	{
+		for (auto it : selectedSubmesh)
+		{
+			nodes->push_back(it->getParent(0));
+		}
+	}
+
+	auto run = [this](shared_ptr< vector<Node*> > nodes) {
+		m_unwrapper.run(nodes);
+	};
+
+	m_unwrapComputeThread = QtConcurrent::run(run, nodes);
+}
+
+void ViewerWidget::onFinishUnwrapUV()
+{
+	this->uvUnwrapDone(this->getUnwrapHandler());
+
+	dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->calculateEmptySpace();
+
+	displayTextureOnMesh();
+
+	if (m_editBoundaryButton != NULL)
+	{
+		BFFUnwrapHandler* handler = dynamic_cast<BFFUnwrapHandler*>(getUnwrapHandler());
+		m_editBoundaryButton->setEnabled(true);
+		if (m_editBoundaryButton->isChecked())
+		{
+			if (handler->isUnwrapped())
+			{
+
+				handler->enableBoundaryEditing(true);
+				dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->displayKnots();
+
+				if (m_uvManipulator != NULL)
+				{
+					m_uvManipulator->enableBoundaryEditing(true);
+				}
+			}
+			else
+			{
+				m_editBoundaryButton->setChecked(false);
+			}
+		}
+
+	
+	}
+
+	auto unwrap = getUnwrapHandler();
+	//UVNormalizeUnwrapHandler* uvNormUnwrap = dynamic_cast<UVNormalizeUnwrapHandler*>(unwrap);
+	disconnect(&m_unwrapper, SIGNAL(onUnwrapFinished()), this, SLOT(onFinishUnwrapUV()));
+	m_unwrapComputeThread = {}; //Set to default //TODO: Pray to compiler god that this does not implicit construct something weird
+	m_unwrappingUV = false;
+	emit emitLockUVDropDown(false);
+	emit emitToggleResourceLocks(false);
+	emit resetprogressbar(true);
+}
+
+void ViewerWidget::setKeyModifierMode()
+{
+	// CTRL is 65507, SHIFT is 65505
+	if (m_keyStack.size() == 0)
+	{
+		m_keyModifierMode = KeyModifierMode::KEY_NONE;
+		return;
+	}
+		
+	
+	if (m_keyStack.size() == 1)
+	{
+		if (m_keyStack.find(65507) != m_keyStack.end())
+			m_keyModifierMode = KeyModifierMode::KEY_CTRL;
+		else if (m_keyStack.find(65505) != m_keyStack.end())
+			m_keyModifierMode = KeyModifierMode::KEY_SHIFT; 
+	}
+	else if (m_keyStack.size() == 2)
+	{
+		if (m_keyStack.find(65507) != m_keyStack.end() && m_keyStack.find(65505) != m_keyStack.end())
+			m_keyModifierMode = KeyModifierMode::KEY_CTRL_SHIFT;
+	}
+
+	return;
+}
+
+void ViewerWidget::addWireframe(Group* parent)
+{
+	osg::ref_ptr<osg::Vec4ubArray> shared_colors = new osg::Vec4ubArray;
+
+
+	osg::ref_ptr<osg::Geometry> polyGeom = new osg::Geometry();
+	osg::ref_ptr<osg::Vec3Array> vertices2 = new osg::Vec3Array();
+
+	EdgeCloneVisitor ecv;
+	parent->getChild(0)->accept(ecv);
+	
+	std::vector<Edge>::const_iterator it;
+	int vertexCount = 0;
+
+	for (it = ecv.getEdgeVector().begin();it!= ecv.getEdgeVector().end();it++)
+	{
+		vertices2->push_back(it->m_v0);
+		vertices2->push_back(it->m_v1);
+		vertexCount += 2;
+	}
+
+	ref_ptr<DrawArrays> da = new DrawArrays(GL_LINES, 0, vertexCount);
+	polyGeom->addPrimitiveSet(da);
+	shared_colors->push_back(Vec4ub(255, 255, 255, 255));
+
+	osg::StateSet* ss = parent->getChild(0)->getOrCreateStateSet();
+	osg::ref_ptr<osg::PolygonOffset> polyoffset = new osg::PolygonOffset;
+	polyoffset->setFactor(1.0f);
+	polyoffset->setUnits(1.0f);
+	osg::ref_ptr<osg::PolygonMode> polymode = new osg::PolygonMode;
+	polymode->setMode(osg::PolygonMode::FRONT_AND_BACK, osg::PolygonMode::FILL);
+	ss->setAttributeAndModes(polyoffset, osg::StateAttribute::OVERRIDE | osg::StateAttribute::ON);
+
+
+	polyGeom->setVertexArray(vertices2);
+	polyGeom->setColorArray(shared_colors.get(), osg::Array::BIND_PER_PRIMITIVE_SET);
+
+	ref_ptr<Geode> geode = new Geode;
+	geode->addDrawable(polyGeom);
+
+	geode->getOrCreateStateSet()->setMode(GL_LIGHTING,
+		osg::StateAttribute::OFF | osg::StateAttribute::PROTECTED);
+	geode->setName("WireFrame");
+
+	
+	parent->insertChild(1, geode);
+}
+
+
+void ViewerWidget::addGridline(Group* parent, float scale)
+{
+	ref_ptr<Vec3Array> vertices = new osg::Vec3Array;
+
+	vertices->push_back(Vec3(-10.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-9.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-9.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-8.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-8.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-7.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-7.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-6.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-6.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-5.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-5.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-4.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-4.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-3.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-3.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-2.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-2.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-1.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-1.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(1.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(1.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(2.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(2.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(3.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(3.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(4.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(4.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(5.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(5.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(6.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(6.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(7.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(7.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(8.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(8.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(9.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(9.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -10.0f)*scale);
+
+
+	vertices->push_back(Vec3(10.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -10.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -9.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -9.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -8.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -8.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -7.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -7.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -6.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -6.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -5.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -5.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -4.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -4.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -3.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -3.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -2.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -2.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, -1.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, -1.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 1.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 1.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 2.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 2.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 3.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 3.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 4.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 4.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 5.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 5.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 6.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 6.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 7.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 7.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 8.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 8.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 9.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 9.0f)*scale);
+	vertices->push_back(Vec3(10.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 10.0f)*scale);
+
+	vertices->push_back(Vec3(10.0f, 0.0f, 0.0f)*scale);
+	vertices->push_back(Vec3(-10.0f, 0.0f, 0.0f)*scale);
+
+	vertices->push_back(Vec3(0.0f, 0.0f, 10.0f)*scale);
+	vertices->push_back(Vec3(0.0f, 0.0f, -10.0f)*scale);
+
+	ref_ptr<Vec4ubArray> colors = new Vec4ubArray;
+	colors->push_back(Vec4ub(180, 180, 180, 255));
+	colors->push_back(Vec4ub(255, 0, 0, 255));
+	colors->push_back(Vec4ub(0, 0, 255, 255));
+
+	ref_ptr<Geometry> grid = new Geometry;
+
+	grid->setVertexArray(vertices.get());
+	grid->setColorArray(colors.get());
+	grid->setColorBinding(Geometry::BIND_PER_PRIMITIVE_SET);
+	grid->addPrimitiveSet(new DrawArrays(GL_LINES, 0, 80));
+	grid->addPrimitiveSet(new DrawArrays(GL_LINES, 80, 2));
+	grid->addPrimitiveSet(new DrawArrays(GL_LINES, 82, 2));
+
+
+	ref_ptr<Geode> geode = new Geode;
+	geode->addDrawable(grid);
+
+	geode->getOrCreateStateSet()->setMode(GL_LIGHTING,
+		osg::StateAttribute::OFF | osg::StateAttribute::PROTECTED);
+	geode->setName("Gridline");
+
+	parent->addChild(geode);
+
+}
+
+void ViewerWidget::selectModeChanged(int idx)
+{
+	m_selectMode = (SelectMode)idx;
+}
+
+void ViewerWidget::selectUnwrapMethodChanged(int idx)
+{
+	if (QtContextHolder* contextEnabledWrapper = dynamic_cast<QtContextHolder*>(m_unwrapHandler))
+	{
+		tryDisconnectQtContext(contextEnabledWrapper->getContexts());
+	}
+
+	delete m_unwrapHandler;
+
+	if (idx == 0)
+		m_unwrapHandler = new LSCMUnwrapHandler();
+	else if (idx == 1)
+		m_unwrapHandler = new TriangleUnwrapHandler();
+	else if (idx == 2)
+		m_unwrapHandler = new OptCutsUnwrapHandler();
+	else if (idx == 3)
+		m_unwrapHandler = new UVNormalizeUnwrapHandler();
+	else if (idx == 4)
+		m_unwrapHandler = new OptCutsBFFUnwrapHandler();
+	else
+		m_unwrapHandler = new BFFUnwrapHandler();
+
+	if (QtContextHolder* contextEnabledWrapper = dynamic_cast<QtContextHolder*>(m_unwrapHandler))
+	{
+		tryConnectQtContext(contextEnabledWrapper->getContexts());
+	}
+}
+
+void ViewerWidget::setGridlineMode(bool autoAdjust)
+{
+	m_autoGridline = autoAdjust;
+
+	ref_ptr<Group> group = dynamic_cast<Group*>(m_viewMap[MESHVIEWER]->getSceneData());
+
+	NamedNodeVisitor nnv3("Gridline");
+	group->accept(nnv3);
+
+	if (nnv3.getNodes().size() != 0)
+	{
+		for (int i = 0; i < nnv3.getNodes().size(); ++i)
+		{
+			auto parent = nnv3.getNodes()[i]->getParent(0);
+			parent->removeChild(nnv3.getNodes()[i]);
+		}
+	}
+
+	if (m_autoGridline)
+	{
+		ComputeBoundsVisitor cbv;
+		group->getChild(0)->accept(cbv);
+		osg::BoundingBox bb = cbv.getBoundingBox();
+		float r = bb.radius();
+		addGridline(group, r / 10.0f);
+	}
+	else
+	{
+		addGridline(group, 1.0f);
+	}
+
+}
+
+
+void ViewerWidget::setSelectMode(bool b)
+{
+	if(m_keyReleased)
+		m_keyModifierMode = KeyModifierMode::KEY_NONE;
+}
+
+void ViewerWidget::onSelectHardEdges(std::set<int>& selectSet, bool fromGUI)
+{
+	highlightViewerSelection(selectSet, fromGUI);
+}
+
+void ViewerWidget::highlightViewerSelection(std::set<int>& selectSet, bool fromGUI)
+{
+	KeyModifierMode keyMode = this->m_keyModifierMode;
+
+	if (m_selectMode == RECT_SELECT_EDGE || m_selectMode == CLICK_SELECT_EDGE)
+	{
+		if (!fromGUI)
+		{
+			this->m_selectedGeometries.clearObjects();
+			EdgeVisitorWorld visitor;
+			m_viewMap[MESHVIEWER]->getSceneData()->asGroup()->getChild(0)->accept(visitor);
+			TriangleEdgeIndex currEdges;
+			getSelectedEdges(visitor, selectSet, currEdges);
+			this->m_selectedGeometries.insertEdges(currEdges);
+		}
+
+		ref_ptr<Group> group = dynamic_cast<Group*>(m_viewMap[MESHVIEWER]->getSceneData());
+
+		auto prevEdges = this->m_selectedGeometries.getEdges();
+		auto selectionIndices = selectSet;
+		removeHighlight(group);
+
+		if (fromGUI)
+		{
+			EdgeVisitorWorld visitor;
+			group->getChild(0)->accept(visitor);
+
+			TriangleEdgeIndex currEdges;
+			getSelectedEdges(visitor, selectionIndices, currEdges);
+
+			TriangleEdgeIndex finalEdges;
+			SelectedObjects::getFinal<Edge>(prevEdges, currEdges, finalEdges, keyMode);
+
+			if (keyMode == KeyModifierMode::KEY_SHIFT)
+			{
+				// should only append in shift mode
+				this->m_selectedGeometries.insertEdges(finalEdges);
+			}
+			else
+			{
+				// clear the previous geometries
+				this->m_selectedGeometries.clearObjects();
+				this->m_selectedGeometries.insertEdges(finalEdges);
+			}
+		}
+
+		this->m_selectedGeometries.setModelName(this->getModelNamePath());
+
+		if (std::get<0>(this->m_selectedGeometries.getEdges()).size() != 0)
+		{
+			ref_ptr<Geode> edge = new Geode;
+			drawSelectedEdges(std::get<1>(this->m_selectedGeometries.getEdges()), edge);
+			group->addChild(edge);
+
+		}
+
+		if (m_uvEditor != NULL)
+		{
+			auto selectedEdges = std::get<0>(this->m_selectedGeometries.getEdges());
+			dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->highlightSelection(selectedEdges, m_selectMode);
+
+			/*for (auto it = selectedEdges.begin(); it != selectedEdges.end(); ++it)
+				std::cout << *it << " ";
+			std::cout << std::endl;*/
+		}
+
+		/*std::cout << "Number of edges in selected geometries: " << std::get<0>(this->m_selectedGeometries.getEdges()).size() << std::endl;
+		std::cout << "Number of edges indices in selected geometries: " << std::get<1>(this->m_selectedGeometries.getEdges()).size() << std::endl;*/
+	}
+	else if (m_selectMode == RECT_SELECT_FACE || m_selectMode == CLICK_SELECT_FACE)
+	{
+		if (!fromGUI)
+		{
+			this->m_selectedGeometries.clearObjects();
+			FaceVisitorWorld visitor;
+			m_viewMap[MESHVIEWER]->getSceneData()->asGroup()->getChild(0)->accept(visitor);
+			TriangleFaceIndex currFaces;
+			getSelectedFaces(visitor, selectSet, currFaces, false);
+			this->m_selectedGeometries.insertFaces(currFaces);
+		}
+
+		// first get a list of previous selected faces
+		auto prevFaces = this->m_selectedGeometries.getFaces();
+
+		auto selectionIndices = selectSet;
+		ref_ptr<Group> sceneData = dynamic_cast<Group*>(m_viewMap[MESHVIEWER]->getSceneData());
+		removeHighlight(sceneData);
+
+		if (fromGUI)
+		{
+			// next get a list of current faces
+			FaceVisitorWorld visitor;
+			sceneData->getChild(0)->accept(visitor);
+
+			TriangleFaceIndex currFaces;
+			getSelectedFaces(visitor, selectionIndices, currFaces);
+
+			TriangleFaceIndex finalFaces;
+			SelectedObjects::getFinal<TriangleVerticesNormal>(prevFaces, currFaces, finalFaces, keyMode);
+
+
+			if (keyMode == KeyModifierMode::KEY_SHIFT)
+			{
+				// should only append in shift mode
+				this->m_selectedGeometries.insertFaces(finalFaces);
+			}
+			else
+			{
+				// clear the previous geometries
+				this->m_selectedGeometries.clearObjects();
+				this->m_selectedGeometries.insertFaces(finalFaces);
+			}
+		}
+
+		this->m_selectedGeometries.setModelName(this->getModelNamePath());
+
+		if (std::get<0>(this->m_selectedGeometries.getFaces()).size() != 0)
+		{
+			ref_ptr<Geode> face = new Geode;
+			drawSelectedFaces(std::get<1>(this->m_selectedGeometries.getFaces()), face);
+			sceneData->addChild(face);
+			//ref_ptr<Geode> border = new Geode;
+			//ColorRenderer::drawSelectedBorders(selectedFaces, border);
+			//sceneData->addChild(border);
+		}
+		if (m_uvEditor != NULL)
+		{
+			auto selectedFaces = std::get<0>(this->m_selectedGeometries.getFaces());
+			dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->highlightSelection(selectedFaces, m_selectMode);
+		}
+
+		/*std::cout << "Number of faces in selected geometries: " << std::get<0>(this->m_selectedGeometries.getFaces()).size() << std::endl;
+		std::cout << "Number of faces indices in selected geometries: " << std::get<1>(this->m_selectedGeometries.getFaces()).size() << std::endl;*/
+	}
+	else if (m_selectMode == RECT_SELECT_VERTEX || m_selectMode == CLICK_SELECT_VERTEX)
+	{
+
+		if (!fromGUI)
+		{
+			this->m_selectedGeometries.clearObjects();
+			VertexVisitorWorld visitor;
+			m_viewMap[MESHVIEWER]->getSceneData()->asGroup()->getChild(0)->accept(visitor);
+			TriangleVertexIndex currFaces;
+			getSelectedVertices(visitor, selectSet, currFaces);
+			this->m_selectedGeometries.insertVertices(currFaces);
+		}
+
+		// first get a list of previous selected faces
+		auto prevVertices = this->m_selectedGeometries.getVertices();
+
+		auto selectionIndices = selectSet;
+		ref_ptr<Group> sceneData = dynamic_cast<Group*>(m_viewMap[MESHVIEWER]->getSceneData());
+		removeHighlight(sceneData);
+
+		if (fromGUI)
+		{
+			VertexVisitorWorld visitor;
+			sceneData->getChild(0)->accept(visitor);
+
+			TriangleVertexIndex currVertices;
+			getSelectedVertices(visitor, selectionIndices, currVertices);
+
+			TriangleVertexIndex finalVertices;
+			SelectedObjects::getFinal<osg::Vec3>(prevVertices, currVertices, finalVertices, keyMode);
+
+
+			if (keyMode == KeyModifierMode::KEY_SHIFT)
+			{
+				// should only append in shift mode
+				this->m_selectedGeometries.insertVertices(finalVertices);
+			}
+			else
+			{
+				// clear the previous geometries
+				this->m_selectedGeometries.clearObjects();
+				this->m_selectedGeometries.insertVertices(finalVertices);
+			}
+		}
+
+		this->m_selectedGeometries.setModelName(this->getModelNamePath());
+
+		if (std::get<0>(this->m_selectedGeometries.getVertices()).size() != 0)
+		{
+			ref_ptr<Geode> vertices = new Geode;
+			drawSelectedVertices(std::get<1>(this->m_selectedGeometries.getVertices()), vertices);
+			sceneData->addChild(vertices);
+		}
+
+		if (m_uvEditor != NULL)
+		{
+			auto selectedVertices = std::get<0>(this->m_selectedGeometries.getVertices());
+			dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->highlightSelection(selectedVertices, m_selectMode);
+		}
+
+		/*std::cout << "Number of vertices in selected geometries: " << std::get<0>(this->m_selectedGeometries.getVertices()).size() << std::endl;
+		std::cout << "Number of vertices indices in selected geometries: " << std::get<1>(this->m_selectedGeometries.getVertices()).size() << std::endl;*/
+
+	}
+	else if (m_selectMode == RECT_SELECT_SUBMESH || m_selectMode == CLICK_SELECT_SUBMESH)
+	{
+		if (!fromGUI)
+		{
+			this->m_selectedGeometries.clearObjects();
+			GeometryVisitor visitor;
+			m_viewMap[MESHVIEWER]->getSceneData()->asGroup()->getChild(0)->accept(visitor);
+			TriangleSubmeshIndex currSubMesh;
+			getSelectedSubmeshes(visitor, selectSet, currSubMesh);
+			this->m_selectedGeometries.insertSubmeshes(currSubMesh);
+		}
+
+		// first get a list of previous selected faces
+		auto prevSubmeshes = this->m_selectedGeometries.getSubmeshes();
+
+		ref_ptr<Group> sceneData = dynamic_cast<Group*>(m_viewMap[MESHVIEWER]->getSceneData());
+		removeHighlight(sceneData);
+
+		if (fromGUI)
+		{
+			// next get a list of current submeshes
+			GeometryVisitor visitor;
+			sceneData->getChild(0)->accept(visitor);
+
+			TriangleSubmeshIndex currSubmeshes;
+			getSelectedSubmeshes(visitor, selectSet, currSubmeshes);
+
+			TriangleSubmeshIndex finalSubmeshes;
+			SelectedObjects::getFinal<osg::Geometry*>(prevSubmeshes, currSubmeshes, finalSubmeshes, keyMode);
+
+
+			if (keyMode == KeyModifierMode::KEY_SHIFT)
+			{
+				// should only append in shift mode
+				this->m_selectedGeometries.insertSubmeshes(finalSubmeshes);
+			}
+			else
+			{
+				// clear the previous geometries
+				this->m_selectedGeometries.clearObjects();
+				this->m_selectedGeometries.insertSubmeshes(finalSubmeshes);
+			}
+		}
+
+		this->m_selectedGeometries.setModelName(this->getModelNamePath());
+
+		if (std::get<0>(this->m_selectedGeometries.getSubmeshes()).size() != 0)
+		{
+			ref_ptr<Group> submesh = new Group;
+			drawSelectedSubmeshes(std::get<1>(this->m_selectedGeometries.getSubmeshes()), submesh);
+			for (int i = 0; i < m_outLiner->topLevelItemCount(); i++)
+			{
+				selectOutlinerSubmeshes(m_outLiner->topLevelItem(i), std::get<1>(this->m_selectedGeometries.getSubmeshes()));
+				
+			}
+			sceneData->addChild(submesh);
+			//ref_ptr<Geode> border = new Geode;
+			//ColorRenderer::drawSelectedBorders(selectedFaces, border);
+			//sceneData->addChild(border);
+		}
+		if (m_uvEditor != NULL)
+		{
+			auto selectedFaces = std::get<0>(this->m_selectedGeometries.getSubmeshes());
+			dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR])->highlightSelection(selectedFaces, m_selectMode);
+		}
+
+		/*std::cout << "Number of submeshes in selected geometries: " << std::get<0>(this->m_selectedGeometries.getSubmeshes()).size() << std::endl;
+		std::cout << "Number of submeshes indices in selected geometries: " << std::get<1>(this->m_selectedGeometries.getSubmeshes()).size() << std::endl;*/
+	}
+}
+
+
+void ViewerWidget::getSelectedFaces(FaceVisitorWorld visitor, std::set<int> selectionIndices,
+	TriangleFaceIndex& selectedFaces, bool visibleFacesOnly)
+{
+	Vec3 direction;
+
+	if (selectionIndices.size() != 0)
+	{
+		if (visibleFacesOnly) 
+		{
+			Vec3 eye;
+			Vec3 center;
+			Vec3 up;
+			m_viewMap[MESHVIEWER]->getCamera()->getViewMatrixAsLookAt(eye, center, up);
+			direction = center - eye;
+		}
+			
+		for (auto iter = selectionIndices.begin(); iter != selectionIndices.end(); ++iter)
+		{
+			int index = *iter;
+			if (index >= 0)
+			{
+				// select faces facing the camera
+				Vec3 normal = (visitor.getAllFaces()[index]).m_Normal;
+
+				if (visibleFacesOnly) 
+				{
+					if (normal*direction <= 0)
+					{
+						std::get<0>(selectedFaces).insert(index);
+						std::get<1>(selectedFaces).insert(visitor.getAllFaces()[index]);
+					}
+				}
+				else
+				{
+					std::get<0>(selectedFaces).insert(index);
+					std::get<1>(selectedFaces).insert(visitor.getAllFaces()[index]);
+				}
+			}
+		}
+	}
+
+	return;
+}
+
+void ViewerWidget::getSelectedEdges(EdgeVisitorWorld visitor, std::set<int> selectionIndices,
+	TriangleEdgeIndex& selectedEdges)
+{
+	if (selectionIndices.size() != 0)
+	{
+		
+		for (auto iter = selectionIndices.begin(); iter != selectionIndices.end(); ++iter)
+		{
+			int index = *iter;
+			if (index >= 0)
+			{
+				auto edge = visitor.getAllEdges().begin();
+				std::advance(edge, index);
+				std::get<1>(selectedEdges).insert(*edge);
+			}
+		}
+
+		std::get<0>(selectedEdges) = selectionIndices;
+	}
+
+	return;
+}
+
+void ViewerWidget::getSelectedVertices(VertexVisitorWorld visitor, std::set<int> selectionIndices,
+	TriangleVertexIndex& selectedVertices)
+{
+	if (selectionIndices.size() != 0)
+	{
+		for (auto iter = selectionIndices.begin(); iter != selectionIndices.end(); ++iter)
+		{
+			int index = *iter;
+			if (index >= 0)
+			{
+				auto vertex = visitor.getAllVertices().begin();
+				std::advance(vertex, index);
+				std::get<1>(selectedVertices).insert(*vertex);
+			}
+		}
+
+		std::get<0>(selectedVertices) = selectionIndices;
+	}
+
+	return;
+}
+
+void ViewerWidget::getSelectedSubmeshes(GeometryVisitor visitor, std::set<int> selectionIndices,
+	TriangleSubmeshIndex& selectedSubmeshes)
+{
+	if (selectionIndices.size() != 0)
+	{
+		for (auto it : selectionIndices)
+		{
+			get<0>(selectedSubmeshes).insert(it);
+			get<1>(selectedSubmeshes).insert(visitor.getGeometryVec()[it]);
+		}
+	}
+
+	return;
+}
+
+void ViewerWidget::drawSelectedEdges(const std::set<Edge>& edges, Geode* geode, float width, Vec4 color)
+{
+	//To do: solve the z-fighting problem.
+	osg::ref_ptr<osg::Vec4Array> shared_colors = new osg::Vec4Array;
+	shared_colors->push_back(color);
+
+	//osg::ref_ptr<osg::Vec3Array> normals = new osg::Vec3Array;
+
+	osg::ref_ptr<osg::Geometry> polyGeom = new osg::Geometry();
+	osg::ref_ptr<osg::Vec3Array> vertices2 = new osg::Vec3Array();
+
+	// get unique lines
+	for (auto it = edges.begin(); it != edges.end(); ++it)
+	{
+		auto edge = *it;
+
+		auto v0 = edge.m_v0; auto v1 = edge.m_v1;
+
+		vertices2->push_back(osg::Vec3(v0.x(), v0.y(), v0.z()));
+		vertices2->push_back(osg::Vec3(v1.x(), v1.y(), v1.z()));
+	}
+
+	osg::StateSet* ss = polyGeom->getOrCreateStateSet();
+	ss->setRenderBinDetails(INT_MAX, "SORT_FRONT_TO_BACK");
+
+	/*osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc; blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	osg::StateSet* stateset = polyGeom->getOrCreateStateSet();
+	stateset->setAttributeAndModes(blendFunc);*/
+
+
+	polyGeom->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+	polyGeom->setVertexArray(vertices2);
+	polyGeom->setColorArray(shared_colors.get(), osg::Array::BIND_OVERALL);
+	//polyGeom->setNormalArray(normals.get(), osg::Array::BIND_OVERALL);
+	polyGeom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, vertices2->size()));
+	polyGeom->getOrCreateStateSet()->setAttribute(new osg::LineWidth(width));
+	geode->addDrawable(polyGeom);
+	geode->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF | osg::StateAttribute::PROTECTED);
+	geode->setName("Highlight");
+
+	return;
+}
+
+void ViewerWidget::drawSelectedFaces(const std::set<TriangleVerticesNormal>& faces, Geode* geode, Vec4 color)
+{
+	if (faces.size() <= 0)
+	{
+		return;
+	}
+	osg::ref_ptr<osg::Vec4Array> shared_colors = new osg::Vec4Array;
+	shared_colors->push_back(color);
+
+	osg::ref_ptr<osg::Vec3Array> normals = new osg::Vec3Array;
+	osg::ref_ptr<osg::Geometry> polyGeom = new osg::Geometry();
+	osg::ref_ptr<osg::Vec3Array> vertices2 = new osg::Vec3Array();
+
+	for (auto it = faces.begin(); it != faces.end(); ++it)
+	{
+		auto face = *it;
+
+		auto vertices = face.m_vertices;
+		auto v0 = vertices[0];
+		auto v1 = vertices[1];
+		auto v2 = vertices[2];
+
+		auto normal = face.m_Normal;
+		normals->push_back(normal);
+
+		vertices2->push_back(osg::Vec3(v0.x(), v0.y(), v0.z()));
+		vertices2->push_back(osg::Vec3(v1.x(), v1.y(), v1.z()));
+		vertices2->push_back(osg::Vec3(v2.x(), v2.y(), v2.z()));
+	}
+
+	osg::StateSet* ss = polyGeom->getOrCreateStateSet();
+	osg::ref_ptr<osg::PolygonOffset> polyoffset = new osg::PolygonOffset;
+	polyoffset->setFactor(0.2f);
+	polyoffset->setUnits(0.2f);
+	osg::ref_ptr<osg::PolygonMode> polymode = new osg::PolygonMode;
+	polymode->setMode(osg::PolygonMode::FRONT_AND_BACK, osg::PolygonMode::FILL);
+	ss->setAttributeAndModes(polyoffset, osg::StateAttribute::OVERRIDE | osg::StateAttribute::ON);
+	ss->setAttributeAndModes(polymode, osg::StateAttribute::OVERRIDE | osg::StateAttribute::ON);
+
+	ss->setRenderBinDetails(INT_MAX / 2, "SORT_FRONT_TO_BACK");
+
+	osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc; blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	osg::StateSet* stateset = polyGeom->getOrCreateStateSet();
+	stateset->setAttributeAndModes(blendFunc);
+
+	polyGeom->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+	polyGeom->setVertexArray(vertices2);
+	polyGeom->setColorArray(shared_colors.get(), osg::Array::BIND_OVERALL);
+	polyGeom->setNormalArray(normals.get(), osg::Array::BIND_OVERALL);
+	polyGeom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES, 0, vertices2->size()));
+	geode->addDrawable(polyGeom);
+
+	geode->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF | osg::StateAttribute::PROTECTED);
+	geode->setName("Highlight");
+
+	return;
+}
+
+void ViewerWidget::drawSelectedVertices(const std::set<osg::Vec3>& vertices, Geode* geode, Vec4 color)
+{
+	osg::ref_ptr<osg::Vec4Array> shared_colors = new osg::Vec4Array;
+	shared_colors->push_back(color);
+
+	osg::ref_ptr<osg::Geometry> polyGeom = new osg::Geometry();
+	osg::ref_ptr<osg::Vec3Array> vertices2 = new osg::Vec3Array();
+
+	for (auto it = vertices.begin(); it != vertices.end(); ++it)
+	{
+		auto vertex = *it;
+
+		auto v0 = vertex;
+		vertices2->push_back(osg::Vec3(v0.x(), v0.y(), v0.z()));
+	}
+
+	osg::StateSet* ss = polyGeom->getOrCreateStateSet();
+	ss->setRenderBinDetails(INT_MAX, "SORT_FRONT_TO_BACK");
+
+
+	polyGeom->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+	polyGeom->getOrCreateStateSet()->setAttributeAndModes(new osg::Point(5.0f));
+	polyGeom->setVertexArray(vertices2);
+	polyGeom->setColorArray(shared_colors.get(), osg::Array::BIND_OVERALL);
+	polyGeom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::POINTS, 0, vertices2->size()));
+
+	geode->addDrawable(polyGeom);
+
+	geode->getOrCreateStateSet()->setMode(GL_LIGHTING,
+		osg::StateAttribute::OFF | osg::StateAttribute::PROTECTED);
+	geode->setName("Highlight");
+
+	return;
+}
+
+
+void ViewerWidget::drawSelectedSubmeshes(const std::set<osg::Geometry*>& submesh, osg::Group* group, osg::Vec4 color)
+{
+	osg::ref_ptr<osg::Vec4Array> shared_colors = new osg::Vec4Array;
+	shared_colors->push_back(color);
+	
+	osg::ref_ptr<osg::Vec3Array> normals = new osg::Vec3Array;
+	osg::ref_ptr<osg::Vec3Array> vertices2 = new osg::Vec3Array();
+
+	for (auto it = submesh.begin(); it != submesh.end(); ++it)
+	{
+		osg::ref_ptr<osg::Geode> geode = new Geode;
+		osg::ref_ptr<osg::Geometry> polyGeom = dynamic_cast<osg::Geometry*>(osg::clone(*it, CopyOp::DEEP_COPY_ALL));
+
+		osg::StateSet* ss = polyGeom->getOrCreateStateSet();
+		osg::ref_ptr<osg::PolygonOffset> polyoffset = new osg::PolygonOffset;
+		polyoffset->setFactor(0.2f);
+		polyoffset->setUnits(0.2f); 
+		polyGeom->setColorArray(shared_colors.get(), osg::Array::BIND_OVERALL);
+		geode->addDrawable(polyGeom);
+		geode->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF | osg::StateAttribute::PROTECTED);
+		auto nodePath = (*it)->getParentalNodePaths()[0];
+		auto matrix = osg::computeLocalToWorld(nodePath);
+		ref_ptr<MatrixTransform> transfrom = new MatrixTransform(matrix);
+		transfrom->addChild(geode);
+		group->addChild(transfrom);
+	}
+
+	group->setName("Highlight");
+}
+
+void ViewerWidget::selectOutlinerSubmeshes(QTreeWidgetItem* item, const std::set<osg::Geometry*>& submesh)
+{
+	GraphData data = item->data(0, Qt::UserRole).value<GraphData>();
+	Node* node = data.getData();
+	if (node->asGeode() != NULL)
+	{
+
+		unsigned int numDrawables = node->asGeode()->getNumDrawables();
+		for (unsigned int i = 0; i < numDrawables; ++i)
+		{
+			for (auto it : submesh)
+			{
+				if ((*it).asNode() == node->asGeode()->getDrawable(i)->asGeometry())
+				{
+					item->setSelected(true);
+				}
+			}
+		}
+	}
+	
+	for (int i = 0; i < item->childCount(); i++)
+	{
+		selectOutlinerSubmeshes(item->child(i), submesh);
+	}
+}
+
+void ViewerWidget::removeHighlight(Group* scene)
+{
+	m_outLiner->clearSelection();
+	NamedNodeVisitor nn("Highlight");
+	scene->accept(nn);
+
+	if (nn.getNodes().size() != 0)
+	{
+		for (int i = 0; i < nn.getNodes().size(); ++i)
+		{
+			auto parent = nn.getNodes()[i]->getParent(0);
+			parent->removeChild(nn.getNodes()[i]);
+		}
+	}
+}
+
+
+void ViewerWidget::displayTextureOnMesh()
+{
+	//if (m_texture == NULL)
+	//{
+	//	return;
+	//}
+
+	//Display texture on mesh module
+	ref_ptr<Node> root = m_viewMap[MESHVIEWER]->getSceneData();
+	ref_ptr<Group> group = dynamic_cast<Group*>(root.get());
+
+	NamedNodeVisitor nnv("Mesh");
+	group->accept(nnv);
+	auto model = nnv.getNodes()[0];
+
+	GeometryVisitor gv;
+	model->accept(gv);
+
+	if (gv.getGeometryVec().size() != 0)
+	{
+		// get the geometry
+		for (int i = 0; i < (int)gv.getGeometryVec().size(); i++)
+		{
+			auto geom = gv.getGeometryVec()[i];
+			osg::StateSet* geomStateset = geom->getOrCreateStateSet();
+			if (m_textureMode&&m_texture!=NULL)
+				geomStateset->setTextureAttributeAndModes(0, m_texture, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+			else
+			{
+				auto texture = dynamic_cast<osg::Texture2D*>(geomStateset->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+				geomStateset->removeTextureAttribute(0, texture);
+			}
+
+		}
+	}
+}
+
+
+void ViewerWidget::displayTextureOnUV()
+{
+	//if (m_texture == NULL)
+	//{
+	//	return;
+	//}
+	//Display texture in UV view
+	ref_ptr<Node> rootUV = m_viewMap[UVEDITOR]->getSceneData();
+	ref_ptr<Group> groupUV = dynamic_cast<Group*>(rootUV.get());
+
+	NamedNodeVisitor nnv1("TextureCanvas");
+	groupUV->accept(nnv1);
+	auto modelUV = nnv1.getNodes()[0];
+
+	GeometryVisitor gv1;
+	modelUV->accept(gv1);
+
+	if (gv1.getGeometryVec().size() != 0)
+	{
+		// get the geometry
+		for(int i=0;i<(int)gv1.getGeometryVec().size();i++)
+		{
+			auto geom = gv1.getGeometryVec()[i];
+
+			osg::StateSet* geomStateset = geom->getOrCreateStateSet();
+			if (m_texture != NULL)
+				geomStateset->setTextureAttributeAndModes(0, m_texture, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+			else
+			{
+				auto texture = dynamic_cast<osg::Texture2D*>(geomStateset->getTextureAttribute(0, osg::StateAttribute::TEXTURE));
+				geomStateset->removeTextureAttribute(0,texture);
+			}
+		}
+	}
+}
+
+
+std::string ViewerWidget::getModelName() const
+{
+	auto modelNameFull = this->getModelNamePath();
+	auto found = modelNameFull.find_last_of("/\\");
+
+	if (found != std::string::npos) return modelNameFull.substr(found + 1);
+	else return modelNameFull; 
+}
+
+void ViewerWidget::setMainWindowTitle(bool isFileChanged)
+{
+	QString fileName = QFileInfo(QString::fromStdString(m_fileName)).completeBaseName();
+	QString fileExtension = QFileInfo(QString::fromStdString(m_fileName)).completeSuffix();
+
+	if (!isFileChanged)
+	{
+		this->getParent()->setWindowTitle(m_windowTitle + tr(" - ") + fileName + tr(".") + fileExtension);
+		m_saveRequired = false;
+	}
+	else
+	{
+		this->getParent()->setWindowTitle(m_windowTitle + tr(" - ") + fileName + tr(".") + fileExtension + tr("*"));
+		m_saveRequired = true;
+	}
+}
+
+void ViewerWidget::uvUnwrapDone(BaseUnwrapHandler* unwrapHandler)
+{
+	if (unwrapHandler->getStatus() == BaseUnwrapHandler::Status::Fail)
+		return;
+
+	std::cout << "Unwrapping is done!" << std::endl;
+
+	UVMapView * uv = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+	uv->removeDistortion();
+	MeshView * mv = dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER]);
+	mv->removeDistortion();
+
+
+	auto group = dynamic_cast<Group*>(m_viewMap[MESHVIEWER]->getSceneData());
+	NamedNodeVisitor nnv("Mesh");
+	group->accept(nnv);
+	auto model = nnv.getNodes()[0];
+
+	//auto faceMap = unwrapHandler->getFaceMap();
+	//auto uvMap = unwrapHandler->getUVMap();
+	auto uvIslands = unwrapHandler->getUVIslands();
+
+
+	GeometryVisitor gv;
+	model->accept(gv);
+
+	std::unordered_map<const osg::Geometry*, ref_ptr<osg::Vec2Array>> geoUVMap;
+
+	for (int island = 0; island < uvIslands->size(); island++)
+	{
+		auto faceMap = (*uvIslands)[island]->getFaceMap();
+		auto uvMap = (*uvIslands)[island]->getUVMap();
+		const Geometry* geo = (*uvIslands)[island]->getGeometry();
+
+		if (geoUVMap.find(geo) == geoUVMap.end())
+		{
+			int count = geo->getVertexArray()->getNumElements();
+			osg::ref_ptr<osg::Vec2Array> texArray = new osg::Vec2Array(count);
+			geoUVMap.insert(make_pair(geo, texArray));
+		}
+
+		for (auto it : *faceMap)
+		{
+			auto faceIdx = it.second;
+			auto uvs = (*uvIslands)[island]->getFaceUVs(it.first);
+			auto texCoordArray = (geoUVMap[geo]);
+			
+			auto a = it.second;
+			(*texCoordArray)[3*it.first] = *std::get<0>(uvs);
+			(*texCoordArray)[3 * it.first+1] = *std::get<1>(uvs);
+			(*texCoordArray)[3 * it.first+2] = *std::get<2>(uvs);
+		}
+		
+	}
+
+	for (auto geo : gv.getGeometryVec())
+	{
+		if (geoUVMap.find(geo) != geoUVMap.end())
+		{
+			geo->setTexCoordArray(0, geoUVMap[geo]);
+		}
+		else
+		{
+			Geometry::ArrayList emptyList;
+			geo->setTexCoordArrayList(emptyList);
+		}
+	}
+
+
+	if (m_uvEditor != NULL)
+	{
+		uv->updateModel();
+		uv->setSceneData(uv->getRootGroup());
+
+		if (m_uvTools.angleDistortion->isChecked())
+		{
+			uv->drawAngleDistortion(true);
+			mv->drawAngleDistortion(true);
+		}
+		else if (m_uvTools.areaDistortion->isChecked())
+		{
+			uv->drawAreaDistortion(true);
+			mv->drawAreaDistortion(true);
+		}
+	}
+
+	this->setMainWindowTitle(true);
+	
+	return;
+}
+
+void ViewerWidget::drawAreaDistortion()
+{
+	UVMapView* uv = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+	MeshView* mv = dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER]);
+
+	bool checked = !m_uvTools.areaDistortion->isChecked();
+	if (checked)
+	{
+		if (m_uvTools.angleDistortion->isChecked())
+		{
+			m_uvTools.angleDistortion->setChecked(false);
+			uv->removeDistortion();
+			mv->removeDistortion();
+		}
+	}
+
+	uv->drawAreaDistortion(checked);
+	mv->drawAreaDistortion(checked);
+
+	return;
+}
+
+void ViewerWidget::drawAngleDistortion()
+{
+	UVMapView* uv = dynamic_cast<UVMapView*>(m_viewMap[UVEDITOR]);
+	MeshView* mv = dynamic_cast<MeshView*>(m_viewMap[MESHVIEWER]);
+
+	bool checked = !m_uvTools.angleDistortion->isChecked();
+	if (checked)
+	{
+		if (m_uvTools.areaDistortion->isChecked())
+		{
+			m_uvTools.areaDistortion->setChecked(false);
+			uv->removeDistortion();
+			mv->removeDistortion();
+		}
+	}
+
+	uv->drawAngleDistortion(checked);
+	mv->drawAngleDistortion(checked);
+
+
+	return;
+}
+
+QWidget* ViewerWidget::getUVWindow() const
+{
+	return this->m_uvWindow;
+}
+
+OutlinerDialog* ViewerWidget::getOutlinerWindow() const
+{
+	return this->m_outLiner;
+}
+
+
+}
+
+_________________________________________________________________________________
+
+prototype1.h
+
+/***************************************************************************************
+ *
+ * Copyright (C) 2018-2019 VIRTUOS HOLDING PTE. LTD.
+ *
+ * This file is part of UV MAPPING TOOL.
+ *
+ * UV MAPPING TOOL can not be copied and/or distributed without the express
+ * permission of VIRTUOS HOLDING PTE. LTD.
+ *
+ ***************************************************************************************/
+
+#ifndef PROTOTYPE_1_HEADER
+#define PROTOTYPE_1_HEADER
+
+#include <osg/ArgumentParser>
+#include <QtWidgets\QPushButton>
+#include <QtWidgets\QMainWindow>
+#include "GraphicsView.h"
+#include <QtWidgets/qlabel.h>
+#include <QtWidgets/qprogressbar.h>
+#include <qtimer.h>
+#include <QtGui/qpalette.h>
+#include <QtWidgets/qgraphicsitem.h>
+#include <QtWidgets/qapplication.h>
+
+
+class QCheckBox;
+class QComboBox;
+class QSlider;
+class QLineEdit;
+class QGridLayout;
+class QToolButton;
+class QListWidgetItem;
+class QGridLayout;
+class QTimer;
+class QPalette;
+class QStyle;
+class QApplication;
+
+
+
+namespace VirtuosRnD
+{
+	class GroupSelectionHandler;
+	class ViewerWidget;
+	class UnwrapHandler;
+	class AboutDialog;
+	class PreferenceDialog;
+
+	class osgViewerQt : public QMainWindow
+	{
+		Q_OBJECT
+
+	public:
+		enum OperationMode
+		{
+			OPERATION_SELECT,
+			OPERATION_MOVE,
+			OPERATION_ROTATE,
+			OPERATION_SCALE
+		};
+
+	public:
+		osgViewerQt(osg::ArgumentParser& arguments);
+		~osgViewerQt();
+
+	public slots:
+		void selectModeChanged(int idx);
+		void selectUnwrapMethodChanged(int idx);
+		void gridlineModeChanged(int idx);
+		void uvDestroyed();
+		void lockUnwrapDropDown(bool lock);
+		void seamEditModeToggle(bool editSeamMode);
+		void toggleResourceLocks(bool lock);
+
+		void timercount(bool count);
+		void updateprogressbar();
+		void onresetprogressbar(bool reset);
+
+	//signals:
+		////TODO: Find a way to terminate this
+	//	void onCloseCleanUpThreads();
+
+	public:
+		ViewerWidget* getViewer() const { return m_viewer; }
+
+	private:
+		void createMenu();
+		void createToolBar();
+		void createUnwrapToolBar();
+		QToolButton* createToolButton(QString iconPath, QString text, void (osgViewerQt::*slot)());
+		void loadMesh();
+		void saveMesh();
+		void preferences();
+		void about();
+		void toggleWireframe();
+		void toggleTexture();
+		void toggleStats();
+		void resetTransform();
+		void selectOperation();
+		void moveOperation();
+		void rotateOperation();
+		void scaleOperation();
+		void popupUVEditor();
+		void popupSceneOutliner();
+		void closeEvent(QCloseEvent* event) override;
+		void createProgressBar();
+
+
+
+	private:
+		ViewerWidget*	m_viewer;
+
+		QDockWidget*	m_uvEditor;
+
+		QToolBar*		m_unwrapToolBar;
+
+		QMenu*			m_selectionMenu;
+
+		QComboBox *		m_selectModeComboBox;
+		QComboBox *		m_unwrapMethod;
+		QCheckBox *		m_gridlineCheckBox;
+		QToolButton *	m_selectButton;
+		QToolButton *	m_moveButton;
+		QToolButton *	m_rotateButton;
+		QToolButton *	m_scaleButton;
+		QToolButton *	m_wireframeButton;
+		QToolButton *	m_textureButton;
+		QToolButton *	m_uvButton;
+		QToolButton *	m_openButton;
+		QToolButton *	m_saveButton;
+		GroupSelectionHandler* m_groupSelectionHandler;
+		OperationMode	m_operationMode;
+
+		QAction * m_openAct;
+		QAction * m_saveAct;
+
+		QDialog*		m_preference_dialog;
+		QGridLayout*	m_preference_mainLayout;
+
+		AboutDialog*	m_about;
+
+		PreferenceDialog*	m_preferences;
+		QProgressBar*	m_progressBar; 
+		QTimer*	timer;
+
+
+
+
+		int m_prevMode = 0;
+		
+	};
+
+}
+
+#endif // PROTOTYPE_1_HEADER
+
+
+
+
