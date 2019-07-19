@@ -1,0 +1,7 @@
+Fruit * apple // Pointer-> can have null value, not necessary to always hold a value
+Fruit & seed //by reference -> must always have value
+
+^Both pointer and reference will allow user to use the variable in another class
+
+Fruit loop //Most basic initialization -> will be destroyed when the class it belongs to is destroyed, will not be used in another class
+
